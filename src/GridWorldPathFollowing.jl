@@ -5,9 +5,11 @@ module GridWorldPathFollowing
 using Reexport
 
 # Base Module Includes
-include("paths.jl")
+include("grid_paths.jl")
+include("trajectories.jl")
 
 # Export Module Contents
-@reexport using GridWorldPathFollowing.Paths
+@reexport using GridWorldPathFollowing.GridPaths
+@reexport using GridWorldPathFollowing.Trajectories
 
 end # module

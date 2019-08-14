@@ -4,7 +4,9 @@ using Random
 using Logging
 
 # Package Under Test
-using GridWorldPathFollowing 
+using GridWorldPathFollowing
+using Vec
+using LinearAlgebra
 
 # Set logging level
 global_logger(SimpleLogger(stderr, Logging.Debug))
@@ -24,8 +26,11 @@ Random.seed!(0)
     end
 
     for (a,b) in zip(x,y)
-        @test isapprox(a,b, rtol=rtol, atol=atol)
+        if !isapprox(a,b, rtol=rtol, atol=atol)
+            return false
+        end
     end
+    return true
 end
 
 # Check if array equals a single value
@@ -35,14 +40,20 @@ end
                   atol::F=zero(F)) where {F<:AbstractFloat}
 
     for a in x
-        @test isapprox(a, y, rtol=rtol, atol=atol)
+        if !isapprox(a,y, rtol=rtol, atol=atol)
+            return false
+        end
     end
+    return true
 end
 
 # Define package tests
 @time @testset "GridWorldPathFollowing Package Tests" begin
     testdir = joinpath(dirname(@__DIR__), "test")
-    @time @testset "GridWorldPathFollowing.Paths" begin
-        include(joinpath(testdir, "test_paths.jl"))
+    @time @testset "GridWorldPathFollowing.GridPaths" begin
+        include(joinpath(testdir, "test_grid_paths.jl"))
+    end
+    @time @testset "GridWorldPathFollowing.Trajectories" begin
+        include(joinpath(testdir, "test_trajectories.jl"))
     end
 end
