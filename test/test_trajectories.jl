@@ -22,6 +22,7 @@ let
     p1 = VecE2(0.0,0.0)
     p2 = VecE2(0.0,1.0)
     traj = ConstSpeedStraightTrajectory(p1,p2,TimeInterval(t1,t2))
+    arclength = norm(p2-p1)
 
     position = p1+dt*(p2-p1)
     heading = (p2-p1)/norm(p2-p1)
@@ -31,6 +32,9 @@ let
     @test get_start_time(traj) == get_start_time(interval)
     @test get_end_time(traj) == get_end_time(interval)
     @test get_Δt(traj,t) == dt
+
+    @test get_length(traj) == arclength
+    @test get_dist(traj, (t1+t2)/2) == arclength/2
 
     @test array_isapprox(get_start_pt(traj),p1)
     @test array_isapprox(get_end_pt(traj),p2)
@@ -57,8 +61,9 @@ let
     center = VecE2(0.0,0.0)
     radius = 1.0
     θ1 = 0.0
-    θ2 = π/2.0
-    traj = ConstSpeedArcTrajectory(center,radius,θ1,θ2,interval)
+    Δθ = π/2
+    θ2 = θ1 + Δθ
+    traj = ConstSpeedArcTrajectory(center,radius,θ1,Δθ,θ2,interval)
 
     θ = θ1 + dt*(θ2-θ1)
     p1 = center + radius*VecE2(cos(θ1),sin(θ1))
@@ -73,6 +78,9 @@ let
     @test get_start_time(traj) == get_start_time(interval)
     @test get_end_time(traj) == get_end_time(interval)
     @test get_Δt(traj,t) == dt
+
+    @test get_length(traj) == arclength
+    @test get_dist(traj, (t1+t2)/2) == arclength/2
 
     @test array_isapprox(get_start_pt(traj),p1)
     @test array_isapprox(get_end_pt(traj),p2)
@@ -101,24 +109,38 @@ let
     center = VecE2(0.0,0.0)
     radius = 1.0
     θ1 = 0.0
-    θ2 = π/2.0
+    Δθ = π/2
+    θ2 = θ1 + Δθ
     # traj = ConstSpeedArcTrajectory(center,radius,θ1,θ2,TimeInterval(t2,t3))
 
     traj = Trajectory(
         Vector{TrajectoryPrimitive}(
         [   ConstSpeedStraightTrajectory(p1,p2,TimeInterval(t1,t2)),
-            ConstSpeedArcTrajectory(center,radius,θ1,θ2,TimeInterval(t2,t3)) ])
+            ConstSpeedArcTrajectory(center,radius,θ1,Δθ,θ2,TimeInterval(t2,t3)) ])
         )
     verify(traj)
 end
 let
     start_pt = VecE2(0.0,0.0)
     start_time = 0.0
-    action_sequence = [LEFT,LEFT,UP,UP,RIGHT,UP,RIGHT]
     cell_width = 1.0
     transition_time = 1.0
+
+    action_sequence = [LEFT,LEFT,UP,UP,WAIT,RIGHT,UP,RIGHT]
     grid_path = construct_grid_world_path(start_pt,start_time,
         action_sequence,cell_width,transition_time)
+    traj = construct_trajectory(grid_path)
+    verify(traj)
 
-    # traj = construct_trajectory(grid_path)
+    action_sequence = [WAIT,LEFT,LEFT,UP,DOWN,UP,WAIT,RIGHT,UP,RIGHT]
+    grid_path = construct_grid_world_path(start_pt,start_time,
+        action_sequence,cell_width,transition_time)
+    traj = construct_trajectory(grid_path)
+    verify(traj)
+
+    action_sequence = [LEFT,UP,DOWN,UP,WAIT,RIGHT,UP,RIGHT,WAIT]
+    grid_path = construct_grid_world_path(start_pt,start_time,
+        action_sequence,cell_width,transition_time)
+    traj = construct_trajectory(grid_path)
+    verify(traj)
 end

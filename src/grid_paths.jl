@@ -6,6 +6,8 @@ export
     GridTransition,
         LEFT,RIGHT,UP,DOWN,WAIT,
     get_translation,
+    get_heading_angle,
+    get_heading_vector,
     get_angular_offset,
     GridWaypoint,
     GridWorldPath,
@@ -38,22 +40,56 @@ function get_translation(a::GridTransition)
     return VecE2(0.0,0.0)
 end
 """
+    `get_heading_angle`
+
+    Returns the heading angle corresponding to a `GridTransition`s
+"""
+function get_heading_angle(a::GridTransition)
+    if a == WAIT
+        return 0.0
+    elseif a == RIGHT
+        return 0.0
+    elseif a == UP
+        return π/2
+    elseif a == LEFT
+        return π
+    elseif a == DOWN
+        return 3π/2
+    end
+    return NaN
+end
+"""
+    `get_heading_vector`
+
+    Returns the heading vector corresponding to a `GridTransition`s
+"""
+function get_heading_vector(a::GridTransition)
+    if a == WAIT
+        return VecE2(0.0,0.0)
+    elseif a == RIGHT
+        return VecE2(1.0,0.0)
+    elseif a == UP
+        return VecE2(0.0,1.0)
+    elseif a == LEFT
+        return VecE2(-1.0,0.0)
+    elseif a == DOWN
+        return VecE2(0.0,-1.0)
+    end
+    return VecE2(NaN,NaN)
+end
+"""
     `get_angular_offset`
 
     Returns the angular offset between two `GridTransition`s
 """
-function get_angular_offset(a1::GridTransition,a2::GridTransition)
-    if (a1 == WAIT || a2 == WAIT)
-        return 0.0
-    else
-        d = Int(a2)-Int(a1)
-        if d > 2
-            d = d - 4
-        elseif d < -2
-            d = d + 4
-        end
-        return d * π/2
+function get_angular_offset(θ1,θ2)
+    Δθ = θ2 - θ1
+    if Δθ > π
+        Δθ = Δθ - 2π
+    elseif Δθ < -π
+        Δθ = Δθ + 2π
     end
+    return Δθ
 end
 
 struct GridWaypoint
