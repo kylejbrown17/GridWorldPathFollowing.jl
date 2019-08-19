@@ -179,11 +179,22 @@ function get_yaw_rate end
 """
 struct ConstSpeedStraightTrajectory <: TrajectoryPrimitive
     pt1::VecE2 # start point
-    pt2::VecE2 # end point
+    # pt2::VecE2 # end point
+    heading::VecE2
+    length::Float64
     interval::TimeInterval
 end
+function ConstSpeedStraightTrajectory(pt1::VecE2,pt2::VecE2,interval::TimeInterval)
+    L = norm(pt2-pt1)
+    ConstSpeedStraightTrajectory(pt1,(pt2-pt1)/L,L,interval)
+end
+# function ConstSpeedStraightTrajectory(pt1::VecE2,heading::VecE2,length::Float64,
+#     interval::TimeInterval)
+#     L = norm(pt2-pt1)
+#     ConstSpeedStraightTrajectory(pt1,pt1+length*heading,heading,length,interval)
+# end
 get_start_pt(traj::ConstSpeedStraightTrajectory) = traj.pt1
-get_end_pt(traj::ConstSpeedStraightTrajectory) = traj.pt2
+get_end_pt(traj::ConstSpeedStraightTrajectory) = traj.pt1 + traj.length * traj.heading
 function verify(traj::ConstSpeedStraightTrajectory)
     @assert (!any(isnan, get_start_pt(traj))) "start point is NaN"
     @assert (!any(isnan, get_end_pt(traj))) "end point is NaN"
@@ -202,12 +213,14 @@ function get_position(traj::ConstSpeedStraightTrajectory,t::Float64)
     return p1 + get_Δt(traj,t) * (p2 - p1)
 end
 function get_heading(traj::ConstSpeedStraightTrajectory,t::Float64)
-    p1 = get_start_pt(traj)
-    p2 = get_end_pt(traj)
-    return (p2-p1) / norm(p2-p1)
+    # p1 = get_start_pt(traj)
+    # p2 = get_end_pt(traj)
+    # return (p2-p1) / norm(p2-p1)
+    return traj.heading
 end
 function get_vel(traj::ConstSpeedStraightTrajectory, t::Float64)
-    vec = get_end_pt(traj) - get_start_pt(traj)
+    # vec = get_end_pt(traj) - get_start_pt(traj)
+    vec = get_heading(traj,t) * get_length(traj)
     dt = get_end_time(traj) - get_start_time(traj)
     return vec / dt
 end
@@ -217,7 +230,8 @@ end
 function get_time_from_pt(traj::ConstSpeedStraightTrajectory,pt::VecE2)
     p1 = get_start_pt(traj)
     p2 = get_end_pt(traj)
-    t  = proj(pt-p1,p2-p1,Float64) + get_start_time(traj)
+    Δt = get_end_time(traj) - get_start_time(traj)
+    t  = get_start_time(traj) + Δt*proj(pt-p1,get_heading(traj,get_end_time(traj)),Float64)
 end
 
 """
@@ -233,12 +247,12 @@ struct ConstSpeedArcTrajectory <: TrajectoryPrimitive
 end
 function ConstSpeedArcTrajectory(center::VecE2,radius::Float64,θ1::Float64,
     Δθ::Float64,interval::TimeInterval)
-    return ConstSpeedArcTrajectory(center,radius,θ1,Δθ,mod(θ1+Δθ,2π),interval)
+    return ConstSpeedArcTrajectory(center,radius,mod(θ1,2π),Δθ,mod(θ1,2π)+Δθ,interval)
 end
 function verify(traj::ConstSpeedArcTrajectory)
     @assert !any(isnan, traj.center) "center is NaN"
     @assert (0.0 <= traj.θ1 <= 2π) "θ1 is outside of [0,2π]"
-    @assert (0.0 <= traj.θ2 <= 2π) "θ2 is outside of [0,2π]"
+    # @assert (0.0 <= traj.θ2 <= 2π) "θ2 is outside of [0,2π]"
     @assert (traj.radius >= 0.0) "radius is negative"
     verify(traj.interval)
 end
@@ -332,7 +346,8 @@ function get_active_segment_idx(traj::Trajectory,t::Float64)
         end
         return i
     end
-    return -1
+    # return -1
+    return length(traj.segments)
 end
 get_position(traj::Trajectory,t::Float64,idx::Int)  = get_position(traj.segments[idx],t)
 get_heading(traj::Trajectory,t::Float64,idx::Int)   = get_heading(traj.segments[idx],t)
@@ -390,7 +405,7 @@ end
     - beginning robot state (`TrajectoryPoint`)
     - instructions (`GridWorldPath`)
 """
-function construct_trajectory(path::GridWorldPath)#,traj_pt::TrajectoryPoint;ϵ = 0.01)
+function construct_trajectory(path::GridWorldPath)
     N = length(path.waypoints)
     @assert (N > 0) "path is empty"
 
@@ -404,8 +419,8 @@ function construct_trajectory(path::GridWorldPath)#,traj_pt::TrajectoryPoint;ϵ 
 
     i = 1
     while i <= N
-        w      = path.waypoints[i]
-        a      = w.transition
+        w = path.waypoints[i]
+        a = w.transition
         h_next = get_heading_vector(a)
         if i == 1
             # Stay in place if a == WAIT
@@ -423,28 +438,40 @@ function construct_trajectory(path::GridWorldPath)#,traj_pt::TrajectoryPoint;ϵ 
             seg = ConstSpeedStraightTrajectory(pos,(pos+ctr_pos)/2,TimeInterval(t,(t+ctr_t)/2))
             push!(traj.segments, seg)
         elseif a == WAIT
-            seg = ConstSpeedStraightTrajectory(pos,ctr_pos,TimeInterval(t,ctr_t))
+            ctr_pos_0 = ctr_pos
+            ctr_t_0 = ctr_t
             while i <= N
                 w = path.waypoints[i]
                 a = w.transition
+                h_next = get_heading_vector(a)
                 if a != WAIT
-                    # straight to center of cell
-                    push!(traj.segments, seg)
-                    pos = get_end_pt(traj)
-                    t   = get_end_time(traj)
-                    h_next = get_heading_vector(a)
                     # turn in place if necessary
                     if abs(dot(h,h_next) != 1) # abs(Δθ) > 0
-                        Δθ = get_angular_offset(atan(h),atan(h_next))
-                        seg = ConstSpeedArcTrajectory(
-                            pos,0.0,atan(h),Δθ,atan(h_next),TimeInterval(t,ctr_t))
-                        pos = get_end_pt(traj)
-                        t   = get_end_time(traj)
+                        radius = path.cellwidth / 2
+                        center = pos + radius * h_next
+                        θ1 = mod(atan(h_next) + π, 2π)
+                        Δθ = get_angular_offset(θ1,atan(h))
+                        θ2 = θ1 + Δθ
+                        # halfway t->ctr_t_0
+                        seg = ConstSpeedArcTrajectory(center,radius,θ1,Δθ/2,TimeInterval(t,ctr_t_0))
+                        push!(traj.segments, seg)
+                        # wait ctr_t_0 -> ctr_t
+                        seg = ConstSpeedArcTrajectory(center,radius,θ1+Δθ/2,0.0,TimeInterval(ctr_t_0,ctr_t))
+                        push!(traj.segments, seg)
+                        # halfway again ctr_t -> (ctr_t+w.t)/2
+                        seg = ConstSpeedArcTrajectory(center,radius,θ1+Δθ/2,Δθ/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
+                        push!(traj.segments, seg)
+                    else
+                        # straight to center of cell
+                        seg = ConstSpeedStraightTrajectory(pos,ctr_pos_0,TimeInterval(t,ctr_t_0))
+                        push!(traj.segments, seg)
+                        # wait
+                        seg = ConstSpeedStraightTrajectory(ctr_pos_0,h_next,0.0,TimeInterval(ctr_t_0,ctr_t))
+                        push!(traj.segments, seg)
+                        # straight on
+                        seg = ConstSpeedStraightTrajectory(ctr_pos,(ctr_pos+w.pt)/2,TimeInterval(ctr_t,(ctr_t+w.t)/2))
+                        push!(traj.segments, seg)
                     end
-                    ctr_pos = w.pt
-                    ctr_t = w.t
-                    seg = ConstSpeedStraightTrajectory(pos,(pos+ctr_pos)/2,TimeInterval(t,(t+ctr_t)/2))
-                    push!(traj.segments, seg)
                     break
                 else
                     ctr_pos = w.pt
@@ -454,7 +481,9 @@ function construct_trajectory(path::GridWorldPath)#,traj_pt::TrajectoryPoint;ϵ 
             end
         elseif dot(h,h_next) == 1 # abs(Δθ) == 0
             # straight to next boundary
-            seg = ConstSpeedStraightTrajectory(pos,(ctr_pos + w.pt)/2,TimeInterval(t,(ctr_t + w.t)/2))
+            seg = ConstSpeedStraightTrajectory(pos,ctr_pos,TimeInterval(t,ctr_t))
+            push!(traj.segments, seg)
+            seg = ConstSpeedStraightTrajectory(ctr_pos,(ctr_pos + w.pt)/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
             push!(traj.segments, seg)
         elseif dot(h,h_next) == 0 # abs(Δθ) == π/2
             # Turn to next boundary
@@ -463,7 +492,9 @@ function construct_trajectory(path::GridWorldPath)#,traj_pt::TrajectoryPoint;ϵ 
             θ1 = mod(atan(h_next) + π, 2π)
             Δθ = get_angular_offset(θ1,atan(h))
             θ2 = θ1 + Δθ
-            seg = ConstSpeedArcTrajectory(center,radius,θ1,Δθ,θ2,TimeInterval(t,(ctr_t + w.t)/2))
+            seg = ConstSpeedArcTrajectory(center,radius,θ1,Δθ/2,TimeInterval(t,ctr_t))
+            push!(traj.segments, seg)
+            seg = ConstSpeedArcTrajectory(center,radius,θ1+Δθ/2,Δθ/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
             push!(traj.segments, seg)
         elseif dot(h,h_next) == -1 # abs(Δθ) == π
             # reverse: straight to interior point, then backward to boundary
@@ -472,7 +503,6 @@ function construct_trajectory(path::GridWorldPath)#,traj_pt::TrajectoryPoint;ϵ 
             seg = ConstSpeedStraightTrajectory(ctr_pos,pos,TimeInterval(ctr_t,(ctr_t + w.t)/2))
             push!(traj.segments, seg)
         end
-        # push!(traj.segments, seg)
         pos = get_end_pt(traj)
         h   = get_heading_vector(a)
         t   = get_end_time(traj)

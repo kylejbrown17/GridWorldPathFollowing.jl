@@ -43,12 +43,18 @@ let
     @test array_isapprox(get_vel(traj,t), velocity)
     @test get_yaw_rate(traj,t) == yaw_rate
     @test get_time_from_pt(traj,get_position(traj,t)) == t
+
     traj_pt1 = get_trajectory_point_by_time(traj,t)
-    traj_pt2 = get_trajectory_point_by_pt(traj, get_position(traj,t))
     @test array_isapprox(traj_pt1.pos, position)
     @test array_isapprox(traj_pt1.heading, heading)
     @test array_isapprox(traj_pt1.vel, velocity)
     @test traj_pt1.yaw_rate == yaw_rate
+
+    traj_pt2 = get_trajectory_point_by_pt(traj, get_position(traj,t))
+    @test array_isapprox(traj_pt2.pos, position)
+    @test array_isapprox(traj_pt2.heading, heading)
+    @test array_isapprox(traj_pt2.vel, velocity)
+    @test traj_pt2.yaw_rate == yaw_rate
 end
 # ConstSpeedArcTrajectory
 let
@@ -89,12 +95,18 @@ let
     @test array_isapprox(get_vel(traj,t), velocity)
     @test get_yaw_rate(traj,t) == yaw_rate
     @test get_time_from_pt(traj,get_position(traj,t)) == t
+
     traj_pt1 = get_trajectory_point_by_time(traj,t)
-    traj_pt2 = get_trajectory_point_by_pt(traj, get_position(traj,t))
     @test array_isapprox(traj_pt1.pos, position)
     @test array_isapprox(traj_pt1.heading, heading)
     @test array_isapprox(traj_pt1.vel, velocity)
     @test traj_pt1.yaw_rate == yaw_rate
+
+    traj_pt2 = get_trajectory_point_by_pt(traj, get_position(traj,t))
+    @test array_isapprox(traj_pt2.pos, position)
+    @test array_isapprox(traj_pt2.heading, heading)
+    @test array_isapprox(traj_pt2.vel, velocity)
+    @test traj_pt2.yaw_rate == yaw_rate
 end
 # Trajectory
 let
@@ -119,6 +131,17 @@ let
             ConstSpeedArcTrajectory(center,radius,θ1,Δθ,θ2,TimeInterval(t2,t3)) ])
         )
     verify(traj)
+
+    get_dist(traj,t1)
+    get_dist(traj,t3)
+    get_position(traj,t1)
+    get_position(traj,t3)
+    get_heading(traj,t1)
+    get_heading(traj,t3)
+    get_vel(traj,t1)
+    get_vel(traj,t3)
+    get_yaw_rate(traj,t1)
+    get_yaw_rate(traj,t3)
 end
 let
     start_pt = VecE2(0.0,0.0)
