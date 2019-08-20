@@ -2,6 +2,8 @@ module Trajectories
 
 using Parameters
 using Vec, LinearAlgebra
+using Convex, SCS, ECOS
+
 using ..GridPaths
 
 export
@@ -31,7 +33,8 @@ export
 
     Trajectory,
     get_active_segment_idx,
-    construct_trajectory
+    construct_trajectory,
+    optimize_velocity_profile
 
 """
     `TimeInterval`
@@ -516,4 +519,91 @@ function construct_trajectory(path::GridWorldPath)
     return traj
 end
 
+"""
+    `optimize_velocity_profile(traj::Trajectory)`
+
+    Given the constraints on robot position as a function of time, compute
+    a dynamically feasible velocity profile that minimizes (the objective can
+    be modified) the squared control effort.
+
+    Params:
+    * m::Int - the number of discrete control command blocks per trajectory.
+    * n::Int - the polynomial order of the command signal within each command
+    window
+
+    Returns:
+    - t_vec ::Vector{Float64} - a vector of time indices of length N*m + 1
+    - accel ::Vector{Float64} - a vector of accel values of length N*m
+    - vel   ::Vector{Float64} - a vector of speed values of length N*m + 1
+    - pos   ::Vector{Float64} - a vector of position values of length N*m + 1
+
+    TODO: make the optimization objective tunable via keyword parameters
+"""
+function optimize_velocity_profile(traj::Trajectory;
+    m::Int=8,
+    n::Int = 0,
+    a_max::Float64 = 2.0,
+    verbose=false
+    )
+    # # t = 0.5
+    # # n = 3
+    # # a = ones(n) # coefficients
+    # # Polynomial basis vector
+    # tv(t,n) = [t^j for j in 0:n]
+    # # a(t) = a[1] + a[2]*t + a[3]*t^2 + ... + a[n]*t^(n-1)
+    # #      = a'*tv
+    # # Differentiation
+    # Dmat(n) = vcat([[i*(i == j-1) for j in 1:n+1]' for i in 1:n+1]...)
+    # # d/dt a(t) = a[2] + 2*a[3]*t + ... + (n-1)*a[n]*t^(n-2)
+    # #           = (Dmat*a)'*tv
+    # # Integration from 0 to t
+    # Imat(n,d=1) = vcat([[(1/prod([k for k in j:j+d-1]))*(i == j+1) for j in 1:n+1]' for i in 2:n+2]...);
+    # # ∫ a(t) = a[1]*t + (1/2)*a[2]*t^2 + ... + (1/n)*a[n]*t^n
+    # #        = (Imat*a)'*t*tv
+
+    N = length(traj.segments)
+    d = [get_length(seg) for seg in traj.segments]
+    cd = cumsum(d)
+    t = [[get_start_time(seg) for seg in traj.segments]..., get_end_time(traj)]
+    dt = diff(t)
+    v0 = 0.0
+    vT = 0.0
+    s0 = 0.0
+    sT = get_length(traj)
+
+    # n = 1 # order of acceleration polynomial: a[i] = a_0 + a_1*t + a_2*t^2 + ... a_n*t^n
+    # m = 8 # num accel windows (m per seg, equally spaced in time)
+    # each trajectory has a m-phase acceleration profile
+    a = [Variable(m) for t in 1:N] # accel cmd coefficients
+    v = [Variable(m+1) for t in 1:N]
+    s = [Variable(m+1) for t in 1:N]
+
+    constraints = [
+        [a[i] <= a_max for i in 1:N]...,
+        [a[i] >= -a_max for i in 1:N]...,
+        v[1][1] == v0,    # initial conditions
+        v[end][end] == vT,  # final conditions
+        [v[i] >= 0.0 for i in 1:N]...,
+        [v[i][end] == v[i+1][1] for i in 1:N-1]...,
+        [v[i][j+1] == v[i][j] + a[i][j]*(dt[i]/m) for i in 1:N for j in 1:m]...,# dynamics
+        s[1][1] == s0,
+        # s[end][end] == sT,
+        [s[i][end] == cd[i] for i in 1:N]...,
+        [s[i][end] == s[i+1][1] for i in 1:N-1]...,
+        [s[i][j+1] == s[i][j] + v[i][j]*dt[i]/m + (1/2)*a[i][j]*(dt[i]/m)^2 for i in 1:N for j in 1:m]...,
+    ]
+
+    problem = minimize(sum([sumsquares(a[i]) for i in 1:N]),constraints);
+    solve!(problem, ECOSSolver(verbose=verbose))
+
+    @assert problem.status == :Optimal "Optimization failed: problem.status != :Optimal"
+
+    t_vec = [0, vcat([t[i] .+ (dt[i]/m)*collect(1:m) for i in 1:N]...)...]
+    accel = vcat([a[i].value[:] for i in 1:N]...)
+    vel = [vcat([v[i].value[1:end-1] for i in 1:N]...)..., v[end].value[end]]
+    pos = [vcat([s[i].value[1:end-1] for i in 1:N]...)..., s[end].value[end]]
+
+    return t_vec, accel, vel, pos
 end
+
+end # module Trajectories

@@ -167,3 +167,18 @@ let
     traj = construct_trajectory(grid_path)
     verify(traj)
 end
+let
+    start_pt = VecE2(0.0,0.0)
+    start_time = 0.0
+    # action_sequence = [DOWN,RIGHT,UP,RIGHT,RIGHT,RIGHT,DOWN,DOWN,LEFT,UP,LEFT,DOWN,LEFT,LEFT]
+    action_sequence = [RIGHT,UP,RIGHT]
+    cell_width = 1.0
+    transition_time = 2.0
+    grid_path = construct_grid_world_path(start_pt,start_time,
+        action_sequence,cell_width,transition_time)
+
+    traj = construct_trajectory(grid_path)
+    verify(traj)
+
+    t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+end
