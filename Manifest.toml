@@ -125,13 +125,6 @@ git-tree-sha1 = "7b1d07f411bc8ddb7977ec7f377b97b158514fe0"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "0.2.0"
 
-[[Registry]]
-git-tree-sha1 = "e08a8b34bb6b2fced7c22e000ed9f79df45246d5"
-repo-rev = "master"
-repo-url = "https://github.com/sisl/Registry"
-uuid = "e74b0b1e-55a7-5265-9e2a-d5306ff2a0db"
-version = "0.0.0"
-
 [[SCS]]
 deps = ["BinaryProvider", "Compat", "Libdl", "MathOptInterface", "MathProgBase"]
 git-tree-sha1 = "f3372fde752302d3cd38d00e2adaf3a7731f7061"
