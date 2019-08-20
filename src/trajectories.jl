@@ -13,7 +13,7 @@ export
     get_end_time,
     get_Δt,
     TrajectoryPoint,
-    TrajectoryPrimitive,
+    AbstractTrajectory,
     EmptyPrimitive,
     get_Δt,
     get_start_pt,
@@ -24,6 +24,7 @@ export
     get_heading,
     get_vel,
     get_yaw_rate,
+    get_time_from_arc_length,
     get_time_from_pt,
     get_trajectory_point_by_time,
     get_trajectory_point_by_pt,
@@ -34,13 +35,15 @@ export
     Trajectory,
     get_active_segment_idx,
     construct_trajectory,
-    optimize_velocity_profile
+    optimize_velocity_profile,
+
+    DenseTrajectory
 
 """
     `TimeInterval`
 
     Defines the start and end time (the speed profile, essentially) for a
-    particular TrajectoryPrimitive
+    particular AbstractTrajectory
 """
 struct TimeInterval
     t1::Float64
@@ -74,22 +77,22 @@ function verify(pt::TrajectoryPoint)
     @assert (!any(isnan,pt.vel)) "vel is NaN"
     @assert (!isnan(pt.yaw_rate)) "yaw_rate is NaN"
 end
-abstract type TrajectoryPrimitive end
-struct EmptyPrimitive <: TrajectoryPrimitive end
+abstract type AbstractTrajectory end
+struct EmptyPrimitive <: AbstractTrajectory end
 """
     `get_start_time`
 
-    Returns the start time of a given TrajectoryPrimitive.
+    Returns the start time of a given AbstractTrajectory.
 """
-function get_start_time(traj::T) where {T <: TrajectoryPrimitive}
+function get_start_time(traj::T) where {T <: AbstractTrajectory}
     return get_start_time(traj.interval)
 end
 """
     `get_end_time`
 
-    Returns the end time of a given TrajectoryPrimitive.
+    Returns the end time of a given AbstractTrajectory.
 """
-function get_end_time(traj::T) where {T <: TrajectoryPrimitive}
+function get_end_time(traj::T) where {T <: AbstractTrajectory}
     return get_end_time(traj.interval)
 end
 """
@@ -98,16 +101,16 @@ end
     Returns the fraction Δt by which t interpolates `get_start_time(traj)` and
     `get_end_time(traj)`
 """
-function get_Δt(traj::T,t::Float64) where {T <: TrajectoryPrimitive}
+function get_Δt(traj::T,t::Float64) where {T <: AbstractTrajectory}
     get_Δt(traj.interval,t)
 end
 """
     `get_trajectory_point_by_time`
 
     Returns the TrajectoryPoint associated with a particular time along a
-    TrajectoryPrimitive.
+    AbstractTrajectory.
 """
-function get_trajectory_point_by_time(traj::T,t::Float64) where {T <: TrajectoryPrimitive}
+function get_trajectory_point_by_time(traj::T,t::Float64) where {T <: AbstractTrajectory}
     pos         = get_position(traj,t)
     heading     = get_heading(traj,t)
     vel         = get_vel(traj,t)
@@ -115,36 +118,45 @@ function get_trajectory_point_by_time(traj::T,t::Float64) where {T <: Trajectory
     TrajectoryPoint(pos,heading,vel,yaw_rate,t)
 end
 """
+    `get_time_from_arc_length(traj::T,s::Float64)`
+
+    Returns the time associated with a particular arc length
+"""
+function get_time_from_arc_length(traj::T,s::Float64) where {T <: AbstractTrajectory}
+    Δt = get_end_time(traj) - get_start_time(traj)
+    return get_start_time(traj) + Δt*(s / get_length(traj))
+end
+"""
     `get_trajectory_point_by_pt`
 
     Returns the TrajectoryPoint associated with a particular location along a
-    TrajectoryPrimitive.
+    AbstractTrajectory.
 """
-function get_trajectory_point_by_pt(traj::T,pt::VecE2) where {T <: TrajectoryPrimitive}
+function get_trajectory_point_by_pt(traj::T,pt::VecE2) where {T <: AbstractTrajectory}
     get_trajectory_point_by_time(traj,get_time_from_pt(traj,pt))
 end
 """
     `get_start_pt`
 
-    Returns the start point of a given TrajectoryPrimitive.
+    Returns the start point of a given AbstractTrajectory.
 """
 function get_start_pt end
 """
     `get_end_pt`
 
-    Returns the end point of a given TrajectoryPrimitive.
+    Returns the end point of a given AbstractTrajectory.
 """
 function get_end_pt end
 """
     `get_length`
 
-    Return the length of a TrajectoryPrimitive
+    Return the length of a AbstractTrajectory
 """
 function get_length end
 """
     `get_dist`
 
-    Return the distance along a TrajectoryPrimitive from the beginning up to a
+    Return the distance along a AbstractTrajectory from the beginning up to a
     given time.
 """
 function get_dist end
@@ -152,35 +164,35 @@ function get_dist end
     `get_position`
 
     Return the position associated with a particular time along a
-    TrajectoryPrimitive
+    AbstractTrajectory
 """
 function get_position end
 """
     `get_heading`
 
     Return the position associated with a particular time along a
-    TrajectoryPrimitive
+    AbstractTrajectory
 """
 function get_heading end
 """
     `get_vel`
 
     Return the speed associated with a particular time along a
-    TrajectoryPrimitive
+    AbstractTrajectory
 """
 function get_vel end
 """
     `get_yaw_rate`
 
     Return the yaw rate associated with a particular time along a
-    TrajectoryPrimitive
+    AbstractTrajectory
 """
 function get_yaw_rate end
 
 """
     `ConstSpeedStraightTrajectory`
 """
-struct ConstSpeedStraightTrajectory <: TrajectoryPrimitive
+struct ConstSpeedStraightTrajectory <: AbstractTrajectory
     pt1::VecE2 # start point
     # pt2::VecE2 # end point
     heading::VecE2
@@ -233,14 +245,14 @@ end
 function get_time_from_pt(traj::ConstSpeedStraightTrajectory,pt::VecE2)
     p1 = get_start_pt(traj)
     p2 = get_end_pt(traj)
-    Δt = get_end_time(traj) - get_start_time(traj)
-    t  = get_start_time(traj) + Δt*proj(pt-p1,get_heading(traj,get_end_time(traj)),Float64)
+    s = proj(pt-p1,get_heading(traj,get_end_time(traj)),Float64) * get_length(traj)
+    get_time_from_arc_length(traj,s)
 end
 
 """
     `ConstSpeedArcTrajectory`
 """
-struct ConstSpeedArcTrajectory <: TrajectoryPrimitive
+struct ConstSpeedArcTrajectory <: AbstractTrajectory
     center::VecE2
     radius::Float64 #
     θ1::Float64 # start angle of vector from center to pt1
@@ -284,6 +296,10 @@ function get_yaw_rate(traj::ConstSpeedArcTrajectory,t::Float64)
     dt = get_end_time(traj) - get_start_time(traj)
     return traj.Δθ / dt
 end
+# function get_time_from_arc_length(traj::ConstSpeedArcTrajectory,s::Float64)
+#     Δt = get_end_time(traj) - get_start_time(traj)
+#     return get_start_time(traj) + Δt*(s / get_length(traj))
+# end
 function get_time_from_pt(traj::ConstSpeedArcTrajectory,pt::VecE2)
     θ = atan(pt-traj.center)
     t = abs(get_angular_offset(traj.θ1,θ))/abs(traj.Δθ)
@@ -292,8 +308,8 @@ end
 """
     `Trajectory`
 """
-@with_kw struct Trajectory
-    segments::Vector{TrajectoryPrimitive} = Vector{TrajectoryPrimitive}()
+@with_kw struct Trajectory <: AbstractTrajectory
+    segments::Vector{AbstractTrajectory} = Vector{AbstractTrajectory}()
 end
 function verify(traj::Trajectory)
     for (i,p) in enumerate(traj.segments)
@@ -604,6 +620,88 @@ function optimize_velocity_profile(traj::Trajectory;
     pos = [vcat([s[i].value[1:end-1] for i in 1:N]...)..., s[end].value[end]]
 
     return t_vec, accel, vel, pos
+end
+
+
+"""
+    Pirated form Graph Utils (remove once I have internet access to add it as a
+    dependency).
+"""
+function find_index_in_sorted_array(array, x)
+    A = 0
+    C = length(array)+1
+    B = max(1,Int(round((A+C) / 2)))
+    while C-A > 1
+        if x < array[B] || ( !(array[B] < x) && !(x < array[B]))
+            A = A
+            C = B
+            B = Int(ceil((A+C) / 2))
+        else
+            A = B
+            C = C
+            B = Int(ceil((A+C) / 2))
+        end
+    end
+    return B
+end
+function linear_interp(v,t)
+    idx = find_index_in_sorted_array(v,t)
+    if length(v) > 0 && idx == length(v)
+        idx -= 1
+    end
+    Δt = (t - v[idx]) / (v[idx+1] - v[idx])
+    return idx, Δt
+end
+
+struct DenseTrajectory <: AbstractTrajectory
+    traj::Trajectory
+    t_vec::Vector{Float64}
+    accel::Vector{Float64}
+    vel::Vector{Float64}
+    pos::Vector{Float64}
+end
+get_start_time(traj::DenseTrajectory)   = get_start_time(traj.traj)
+get_end_time(traj::DenseTrajectory)     = get_end_time(traj.traj)
+get_start_pt(traj::DenseTrajectory)     = get_start_pt(traj.traj)
+get_end_pt(traj::DenseTrajectory)       = get_end_pt(traj.traj)
+function verify(traj::DenseTrajectory)
+    verify(traj.traj)
+    @assert isapprox(traj.t_vec[1], get_start_time(traj.traj)) "start times do not match"
+    @assert isapprox(traj.t_vec[end], get_end_time(traj.traj)) "end times do not match"
+    @assert isapprox(traj.pos[end], get_length(traj.traj)) "lengths do not match"
+    @assert length(traj.vel) == length(traj.pos) == length(traj.t_vec) "t_vec, vel, pos have different lengths"
+    @assert length(traj.accel) == max(0,length(traj.t_vec)-1) "vel and pos have different lengths"
+end
+
+get_length(traj::DenseTrajectory) = get_length(traj.traj)
+function get_dist(traj::DenseTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t_vec, t)
+    s = traj.pos[idx] + (traj.pos[idx+1] - traj.pos[idx]) * Δe
+    return s
+end
+function get_position(traj::DenseTrajectory, t::Float64)
+    t = get_time_from_arc_length(traj.traj, get_dist(traj, t))
+    get_position(traj.traj, t)
+end
+function get_heading(traj::DenseTrajectory, t::Float64)
+    t = get_time_from_arc_length(traj.traj, get_dist(traj, t))
+    get_heading(traj.traj, t)
+end
+function get_vel(traj::DenseTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t_vec, t)
+    v = traj.vel[idx] + (traj.vel[idx+1] - traj.vel[idx]) * Δe
+    return v * get_heading(traj,t)
+end
+function get_yaw_rate(traj::DenseTrajectory,t::Float64)
+    s = get_dist(traj, t)
+    v_true = norm(get_vel(traj, t))
+    v_nominal = norm(get_vel(traj.traj, get_time_from_arc_length(traj.traj,s)))
+    yw_nominal = get_yaw_rate(traj.traj, get_time_from_arc_length(traj.traj,s))
+    if v_nominal != 0
+        return yw_nominal * (v_true / v_nominal)
+    else
+        return yw_nominal
+    end
 end
 
 end # module Trajectories

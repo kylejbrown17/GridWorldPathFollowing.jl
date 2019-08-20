@@ -126,7 +126,7 @@ let
     # traj = ConstSpeedArcTrajectory(center,radius,θ1,θ2,TimeInterval(t2,t3))
 
     traj = Trajectory(
-        Vector{TrajectoryPrimitive}(
+        Vector{AbstractTrajectory}(
         [   ConstSpeedStraightTrajectory(p1,p2,TimeInterval(t1,t2)),
             ConstSpeedArcTrajectory(center,radius,θ1,Δθ,θ2,TimeInterval(t2,t3)) ])
         )
@@ -181,4 +181,16 @@ let
     verify(traj)
 
     t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+
+    dense_traj = DenseTrajectory(traj,t_vec,accel,vel,pos)
+    verify(dense_traj)
+    t = 0.5
+    get_length(dense_traj)
+    get_dist(dense_traj,t)
+    get_position(dense_traj,t)
+    get_heading(dense_traj,t)
+    get_vel(dense_traj,t)
+    get_yaw_rate(dense_traj,t)
+
+    get_trajectory_point_by_time(dense_traj,t)
 end
