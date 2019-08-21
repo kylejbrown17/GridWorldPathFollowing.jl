@@ -4,6 +4,7 @@ using Parameters
 using Vec, LinearAlgebra
 using Convex, SCS, ECOS
 using NearestNeighbors
+using GraphUtils
 
 using ..GridPaths
 
@@ -646,33 +647,14 @@ function optimize_velocity_profile(traj::Trajectory;
     return t_vec, accel, vel, pos
 end
 
-
-"""
-    Pirated form Graph Utils (remove once I have internet access to add it as a
-    dependency).
-"""
-function find_index_in_sorted_array(array, x)
-    A = 0
-    C = length(array)+1
-    B = max(1,Int(round((A+C) / 2)))
-    while C-A > 1
-        if x < array[B] || ( !(array[B] < x) && !(x < array[B]))
-            A = A
-            C = B
-            B = Int(ceil((A+C) / 2))
-        else
-            A = B
-            C = C
-            B = Int(ceil((A+C) / 2))
-        end
-    end
-    return B
-end
 function linear_interp(v,t)
-    idx = find_index_in_sorted_array(v,t)
-    if length(v) > 0 && idx == length(v)
-        idx -= 1
-    end
+    idx = find_index_in_sorted_array(v,t)-1
+    idx = max(1, min(length(v)-1), idx)
+    # if length(v) > 0 && idx >= length(v)
+    #     idx = length(v)-1
+    # elseif idx == 0
+    #     idx += 1
+    # end
     Δt = (t - v[idx]) / (v[idx+1] - v[idx])
     return idx, Δt
 end
@@ -728,41 +710,41 @@ function get_yaw_rate(traj::DenseTrajectory,t::Float64)
     end
 end
 
-mutable struct TrajTracker
-    traj::DenseTrajectory
-    kdtree::KDTree
-    # state
-    idx::Int
-    t::Float64
-end
-TrajTracker(traj::DenseTrajectory) = TrajTracker(
-    traj, KDTree([get_position(traj,t) for t in traj.t_vec]), -1, 0.0)
-function get_closest_pt!(tracker::TrajTracker,pos::VecE2,k=1) where {V <: AbstractVector}
-    traj = tracker.traj
-    kdtree = tracker.kdtree
-
-    idxs, dists = knn(kdtree, pos, k)
-    t1 = traj.t_vec[idxs[1]]
-    s = get_dist(traj,t1)
-    seg_idx = get_active_segment_idx(traj.traj, get_time_from_arc_length(traj.traj,s))
-
-    closest_idx  = -1
-    closest_dist = Inf
-    closest_pt = VecE2(NaN,NaN)
-    for i in seg_idx-1:seg_idx+1
-        if 1 <= i <= length(traj.traj.segments)
-            seg = traj.traj.segments[i]
-            pt = get_closest_pt(seg,pos)
-            if norm(pt - pos) < closest_dist
-                closest_idx = i
-                closest_dist = norm(pt - pos)
-                closest_pt = pt
-            end
-        end
-    end
-    tracker.idx = closest_idx
-    tracker.t = pt.t
-    return tracker, closest_pt
-end
+# mutable struct TrajTracker
+#     traj::DenseTrajectory
+#     kdtree::KDTree
+#     # state
+#     idx::Int
+#     t::Float64
+# end
+# TrajTracker(traj::DenseTrajectory) = TrajTracker(
+#     traj, KDTree([get_position(traj,t) for t in traj.t_vec]), -1, 0.0)
+# function get_closest_pt!(tracker::TrajTracker,pos::VecE2,k=1) where {V <: AbstractVector}
+#     traj = tracker.traj
+#     kdtree = tracker.kdtree
+#
+#     idxs, dists = knn(kdtree, pos, k)
+#     t1 = traj.t_vec[idxs[1]]
+#     s = get_dist(traj,t1)
+#     seg_idx = get_active_segment_idx(traj.traj, get_time_from_arc_length(traj.traj,s))
+#
+#     closest_idx  = -1
+#     closest_dist = Inf
+#     closest_pt = VecE2(NaN,NaN)
+#     for i in seg_idx-1:seg_idx+1
+#         if 1 <= i <= length(traj.traj.segments)
+#             seg = traj.traj.segments[i]
+#             pt = get_closest_pt(seg,pos)
+#             if norm(pt - pos) < closest_dist
+#                 closest_idx = i
+#                 closest_dist = norm(pt - pos)
+#                 closest_pt = pt
+#             end
+#         end
+#     end
+#     tracker.idx = closest_idx
+#     tracker.t = pt.t
+#     return tracker, closest_pt
+# end
 
 end # module Trajectories
