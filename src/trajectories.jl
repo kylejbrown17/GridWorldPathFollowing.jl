@@ -3,6 +3,7 @@ module Trajectories
 using Parameters
 using Vec, LinearAlgebra
 using Convex, SCS, ECOS
+using NearestNeighbors
 
 using ..GridPaths
 
@@ -134,6 +135,16 @@ end
 """
 function get_trajectory_point_by_pt(traj::T,pt::VecE2) where {T <: AbstractTrajectory}
     get_trajectory_point_by_time(traj,get_time_from_pt(traj,pt))
+end
+"""
+    `get_closest_pt(traj::T, pt::VecE2) where {T <: AbstractTrajectory}`
+
+    Finds the closest point on `traj` to `pt` (based on Euclidean distance)
+"""
+function get_closest_pt(traj::T, pt::VecE2) where {T <: AbstractTrajectory}
+    t = get_time_from_pt(traj,pt)
+    t = min(max(t,get_start_time(traj)),get_end_time(traj))
+    get_trajectory_point_by_time(traj, t)
 end
 """
     `get_start_pt`
@@ -286,7 +297,7 @@ function get_position(traj::ConstSpeedArcTrajectory,t::Float64)
 end
 function get_heading(traj::ConstSpeedArcTrajectory,t::Float64)
     θ = traj.θ1 + get_Δt(traj,t) * traj.Δθ
-    return VecE2(-sin(θ),cos(θ))
+    return VecE2(-sin(θ),cos(θ)) * sign(traj.Δθ)
 end
 function get_vel(traj::ConstSpeedArcTrajectory, t::Float64)
     dt = get_end_time(traj) - get_start_time(traj)
@@ -302,8 +313,16 @@ end
 # end
 function get_time_from_pt(traj::ConstSpeedArcTrajectory,pt::VecE2)
     θ = atan(pt-traj.center)
-    t = abs(get_angular_offset(traj.θ1,θ))/abs(traj.Δθ)
+    Δθ = get_angular_offset(traj.θ1,θ)
+    while sign(Δθ) != sign(traj.Δθ)
+        Δθ += 2π*sign(traj.Δθ)
+    end
+    t = Δθ/traj.Δθ
 end
+# function get_closest_pt(traj::ConstSpeedStraightTrajectory, pt::VecE2)
+#     t = get_time_from_pt(traj,pt)
+#     t = min(max(t,get_start_time(traj)),get_end_time(traj))
+# end
 
 """
     `Trajectory`
@@ -356,6 +375,11 @@ get_length(traj::Trajectory) = sum([get_length(seg) for seg in traj.segments])
     Returns the integer index identifying which mode of the trajectory is active
 """
 function get_active_segment_idx(traj::Trajectory,t::Float64)
+    if get_start_time(traj) > t
+        return 1
+    elseif get_end_time(traj) < t
+        return length(traj.segments)
+    end
     for (i,p) in enumerate(traj.segments)
         if get_start_time(p) > t
             break
@@ -702,6 +726,43 @@ function get_yaw_rate(traj::DenseTrajectory,t::Float64)
     else
         return yw_nominal
     end
+end
+
+mutable struct TrajTracker
+    traj::DenseTrajectory
+    kdtree::KDTree
+    # state
+    idx::Int
+    t::Float64
+end
+TrajTracker(traj::DenseTrajectory) = TrajTracker(
+    traj, KDTree([get_position(traj,t) for t in traj.t_vec]), -1, 0.0)
+function get_closest_pt!(tracker::TrajTracker,pos::VecE2,k=1) where {V <: AbstractVector}
+    traj = tracker.traj
+    kdtree = tracker.kdtree
+
+    idxs, dists = knn(kdtree, pos, k)
+    t1 = traj.t_vec[idxs[1]]
+    s = get_dist(traj,t1)
+    seg_idx = get_active_segment_idx(traj.traj, get_time_from_arc_length(traj.traj,s))
+
+    closest_idx  = -1
+    closest_dist = Inf
+    closest_pt = VecE2(NaN,NaN)
+    for i in seg_idx-1:seg_idx+1
+        if 1 <= i <= length(traj.traj.segments)
+            seg = traj.traj.segments[i]
+            pt = get_closest_pt(seg,pos)
+            if norm(pt - pos) < closest_dist
+                closest_idx = i
+                closest_dist = norm(pt - pos)
+                closest_pt = pt
+            end
+        end
+    end
+    tracker.idx = closest_idx
+    tracker.t = pt.t
+    return tracker, closest_pt
 end
 
 end # module Trajectories
