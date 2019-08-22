@@ -412,7 +412,6 @@ function get_active_segment_idx(traj::Trajectory,t::Float64)
     return length(traj.segments)
 end
 function get_time_from_arc_length(traj::Trajectory,s::Float64)
-    @assert s >= 0.0 "arc length is negative"
     s0 = 0.0
     idx = length(traj.segments)
     for (i,seg) in enumerate(traj.segments[1:end-1])

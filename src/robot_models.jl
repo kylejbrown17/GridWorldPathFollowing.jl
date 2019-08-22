@@ -77,7 +77,7 @@ function get_action(controller::TrackingController,target,ff,state,t)
     # reference (global frame)
     xr,yr,θr = target[1],target[2],target[3]
     wr,vr = ff[1],ff[2]
-    if abs(vr) <= 0.000001 # dirty trick to avoid problems with waiting
+    if (abs(vr) <= 0.000001) && (abs(wr) <= 0.000001) # dirty trick to avoid problems with waiting
         return [0.0,0.0]
     end
     # errors in robot frame
