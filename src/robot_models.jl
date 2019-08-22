@@ -77,14 +77,15 @@ function get_action(controller::TrackingController,target,ff,state,t)
     # reference (global frame)
     xr,yr,θr = target[1],target[2],target[3]
     wr,vr = ff[1],ff[2]
-    if (abs(vr) <= 0.000001) && (abs(wr) <= 0.000001) # dirty trick to avoid problems with waiting
-        return [0.0,0.0]
-    end
     # errors in robot frame
     e = [ cos(θ) sin(θ) 0;
          -sin(θ) cos(θ) 0;
               0      0  1]*[xr-x,yr-y,get_angular_offset(θ,θr)]
     xe,ye,θe = e[1],e[2],e[3]
+    # dirty trick to avoid problems with waiting
+    if (abs(vr) <= 0.000001) && (abs(wr) <= 0.000001)
+        return [0.0,0.0]
+    end
     # change of coordinates
     x0 = θe
     x1 = ye

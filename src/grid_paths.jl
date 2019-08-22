@@ -4,7 +4,7 @@ using Vec
 
 export
     GridTransition,
-        LEFT,RIGHT,UP,DOWN,WAIT,
+        WEST,EAST,NORTH,SOUTH,WAIT,
     get_translation,
     get_heading_angle,
     get_heading_vector,
@@ -14,10 +14,10 @@ export
     construct_grid_world_path
 
 @enum GridTransition begin
-    RIGHT   = 1
-    UP      = 2
-    LEFT    = 3
-    DOWN    = 4
+    EAST   = 1
+    NORTH      = 2
+    WEST    = 3
+    SOUTH    = 4
     WAIT    = 5
 end
 """
@@ -26,13 +26,13 @@ end
     Returns the direction associated with a particular `GridTransition`
 """
 function get_translation(a::GridTransition)
-    if a == LEFT
+    if a == WEST
         return VecE2(-1.0, 0.0)
-    elseif a == RIGHT
+    elseif a == EAST
         return VecE2(1.0, 0.0)
-    elseif a == UP
+    elseif a == NORTH
         return VecE2(0.0,1.0)
-    elseif a == DOWN
+    elseif a == SOUTH
         return VecE2(0.0,-1.0)
     elseif a == WAIT
         return VecE2(0.0,0.0)
@@ -47,13 +47,13 @@ end
 function get_heading_angle(a::GridTransition)
     if a == WAIT
         return 0.0
-    elseif a == RIGHT
+    elseif a == EAST
         return 0.0
-    elseif a == UP
+    elseif a == NORTH
         return π/2
-    elseif a == LEFT
+    elseif a == WEST
         return π
-    elseif a == DOWN
+    elseif a == SOUTH
         return 3π/2
     end
     return NaN
@@ -66,13 +66,13 @@ end
 function get_heading_vector(a::GridTransition)
     if a == WAIT
         return VecE2(0.0,0.0)
-    elseif a == RIGHT
+    elseif a == EAST
         return VecE2(1.0,0.0)
-    elseif a == UP
+    elseif a == NORTH
         return VecE2(0.0,1.0)
-    elseif a == LEFT
+    elseif a == WEST
         return VecE2(-1.0,0.0)
-    elseif a == DOWN
+    elseif a == SOUTH
         return VecE2(0.0,-1.0)
     end
     return VecE2(NaN,NaN)
