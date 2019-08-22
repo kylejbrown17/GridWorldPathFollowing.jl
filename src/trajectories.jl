@@ -316,6 +316,9 @@ function get_position(traj::ConstSpeedArcTrajectory,t::Float64)
 end
 function get_heading(traj::ConstSpeedArcTrajectory,t::Float64)
     θ = traj.θ1 + get_Δt(traj,t) * traj.Δθ
+    if sign(traj.Δθ) == 0
+        return VecE2(-sin(θ),cos(θ))
+    end
     return VecE2(-sin(θ),cos(θ)) * sign(traj.Δθ)
 end
 function get_vel(traj::ConstSpeedArcTrajectory, t::Float64)
