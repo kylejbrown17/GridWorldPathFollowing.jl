@@ -12,7 +12,8 @@ abstract type AbstractAction end
 
 export
     forward_euler_integration,
-    LookAheadController,
+    TrackingController,
+    sat,
     get_action,
     UnicycleModel,
     dynamics,
@@ -33,18 +34,25 @@ function forward_euler_integration(model,state,u,dt;nsteps=10)
     return s
 end
 
-@with_kw struct LookAheadController
+""" saturation function """
+sat(x,δ) = abs(x) <= δ ? x : sign(x)*δ
+"""
+    `TrackingController`
+
+    From Lee et al., "Tracking Control of
+    Unicycle-Modeled Mobile Robots Using a Saturation Feedback Controller"
+    [link]{https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=911382}
+"""
+@with_kw struct TrackingController
     dt  ::Float64 = 0.0
-    a   ::Float64 = 1.0
+    a   ::Float64 = 4.0
     k0  ::Float64 = 1.0
     μ   ::Float64 = 1.0
     γ   ::Float64 = 0.1
     ϵ   ::Float64 = 0.1
     k1  ::Float64 = 1.0
-    b   ::Float64 = 1.0
+    b   ::Float64 = 4.0
 end
-""" saturation function """
-sat(x,δ) = abs(x) <= δ ? x : sign(x)*δ
 """
     This function follows Lee et al., "Tracking Control of
     Unicycle-Modeled Mobile Robots Using a Saturation Feedback Controller"
@@ -56,7 +64,7 @@ sat(x,δ) = abs(x) <= δ ? x : sign(x)*δ
     * `ff`     - the current feedforward command [vr, wr] of the tracked trajectory
     * `state`  - the current state [x, y, θ] of the robot
 """
-function get_action(controller::LookAheadController,target,ff,state,t)
+function get_action(controller::TrackingController,target,ff,state,t)
     a = controller.a   # 0 < a < vmax - sup_{t >= 0} abs(vr)
     k0 = controller.k0 # k0 > 0
     μ = controller.μ   # μ = 0 or 1
@@ -100,7 +108,7 @@ function get_action(controller::LookAheadController,target,ff,state,t)
     v = u1 + vr*cos(x0)
     return [w, v]
 end
-function get_action(controller::LookAheadController,ref::TrajectoryPoint,state,t)
+function get_action(controller::TrackingController,ref::TrajectoryPoint,state,t)
     target = [ref.pos.x, ref.pos.y, atan(ref.heading)]
     ff = [ref.yaw_rate, norm(ref.vel)]
     get_action(controller,target,ff,state,t)
@@ -116,8 +124,9 @@ function dynamics(model::UnicycleModel,state,cmd)
     sdot = [v*cos(θ),v*sin(θ),w]
 end
 
-function simulate(model::UnicycleModel,controller::LookAheadController,traj,state,t0,tf,dt)
+function simulate(model::UnicycleModel,controller::TrackingController,traj,state,t0,tf,dt)
     states = [state]
+    cmds = Vector{Vector{Float64}}()
     t = t0
     while t <= tf
         # get target state in global frame
@@ -125,9 +134,10 @@ function simulate(model::UnicycleModel,controller::LookAheadController,traj,stat
         u         = get_action(controller,target_pt,state,t)
         state     = forward_euler_integration(model,state,u,dt)
         push!(states, state)
+        push!(cmds,u)
         t += dt
     end
-    return states
+    return states, cmds
 end
 
 # struct UnicycleKinematicModel <: AbstractRobotModel
@@ -169,7 +179,7 @@ end
 #     return UnicycleKinematicState(s.pos+Δxy,VecE2(cos(θ),sin(θ)),s.t+dt)
 # end
 
-# @with_kw struct LookAheadController
+# @with_kw struct TrackingController
 #     dt  ::Float64 = 0.0
 #     a   ::Float64 = 1.0
 #     k0  ::Float64 = 1.0
