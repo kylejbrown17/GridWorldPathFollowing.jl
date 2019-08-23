@@ -93,7 +93,8 @@ end
     To be employed when the robot needs to turn in place.
 """
 @with_kw struct PivotController <: Controller
-    k::Float64 = 1.0
+    kw::Float64 = 0.5
+    kp::Float64 = 2.0
 end
 ################################################################################
 ############################# StabilizeController ##############################
@@ -104,7 +105,9 @@ end
     To be employed when the Robot needs to stabilize about a particular point
 """
 @with_kw struct StabilizeController <: Controller
-    k::Float64 = 1.0
+    kw::Float64 = 2.0
+    kp::Float64 = 4.0
+    kϕ::Float64 = 15.0
 end
 
 ################################################################################
@@ -153,9 +156,9 @@ function get_action(controller::TrackingController,target::UnicycleState,ff::Uni
               0      0  1]*[xr-x,yr-y,get_angular_offset(θ,θr)]
     xe,ye,θe = e[1],e[2],e[3]
     # dirty trick to avoid problems with waiting
-    if (abs(vr) <= 0.000001) && (abs(wr) <= 0.000001)
-        return [0.0,0.0]
-    end
+    # if (abs(vr) <= 0.000001) && (abs(wr) <= 0.000001)
+    #     return [0.0,0.0]
+    # end
     # change of coordinates
     x0 = θe
     x1 = ye
@@ -179,30 +182,63 @@ function get_action(controller::TrackingController,target::UnicycleState,ff::Uni
     v = u1 + vr*cos(x0)
     return [w, v]
 end
+"""
+    `get_action(controller::PivotController,target,ff,state,t)`
+
+    A simple control law to track about a time-varying heading while reducing
+    the position error when possible. The idea is to track the heading signal
+    and drive forward or backward to reduce the position error.
+
+    Inputs:
+    * `target` - the current reference point [xr, yr, θr] of the tracked trajectory
+    * `ff`     - the current feedforward command [vr, wr] of the tracked trajectory
+    * `state`  - the current state [x, y, θ] of the robot
+"""
 function get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)
     # println("get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
-    k = controller.k
+    kw = controller.kw
+    kp = controller.kp
     # state (global frame)
     x,y,θ = state[1],state[2],state[3]
     # reference (global frame)
     xr,yr,θr = target[1],target[2],target[3]
     wr,vr = ff[1],ff[2]
-    # TODO implement an actual control law
-    w = wr
-    v = vr
+    # control law
+    dp = dot([xr-x,yr-y],[cos(θ),sin(θ)]) # distance to target position projected onto heading vector
+    dθ = get_angular_offset(θ,θr) # heading error
+    w = wr + kw*dθ
+    v = vr + kp*dp
     return [w, v]
 end
+"""
+    `get_action(controller::stabilizeController,target,ff,state,t)`
+
+    A simple control law to stabilize about a static pose. 
+
+    Inputs:
+    * `target` - the current reference point [xr, yr, θr] of the tracked trajectory
+    * `ff`     - the current feedforward command [vr, wr] of the tracked trajectory
+    * `state`  - the current state [x, y, θ] of the robot
+"""
 function get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)
     # println("get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
-    k = controller.k
+    kw = controller.kw
+    kp = controller.kp
+    kϕ = controller.kϕ
     # state (global frame)
     x,y,θ = state[1],state[2],state[3]
     # reference (global frame)
     xr,yr,θr = target[1],target[2],target[3]
     wr,vr = ff[1],ff[2]
-    # TODO implement an actual control law
-    w = wr
-    v = vr
+    # control law
+    dx = xr-x
+    dy = yr-y
+    dp = dot([dx,dy],[cos(θ),sin(θ)]) # distance to target position projected onto heading vector
+    dθ = ([cos(θ),sin(θ),0] × [cos(θr),sin(θr),0])[end] # heading error
+    ϕ = atan(dy,dx)
+    dϕ = ([cos(θ),sin(θ),0] × [cos(ϕ),sin(ϕ),0])[end] # angular displacement from target position
+    w = wr + kϕ*dϕ*dp + kw*dθ
+    v = vr + kp*dp
     return [w, v]
 end
 
@@ -255,6 +291,34 @@ function simulate(model::UnicycleModel,controller,traj,state,t0,tf,dt)
         t += dt
     end
     return states, cmds
+end
+
+function optimize_controller_params(sim_model,traj,initial_state;
+        dt=0.1,
+        k0_range=1.0:0.25:4.0,
+        k1_range=1.0:0.25:4.0
+    )
+    t0 = get_start_time(traj)
+    tf = get_end_time(traj)
+
+    opt_vec = [NaN,NaN]
+    opt_cost = Inf
+    for k0 in k0_range
+        for k1 in k1_range
+            controller = TrackingController(k0=k0,k1=k1)
+            states, cmds = simulate(sim_model,controller,traj,initial_state,t0,tf,dt)
+            err = 0.0
+            for (t,state) in zip(collect(t0:dt:tf),states)
+                target_pt = get_trajectory_point_by_time(traj, t)
+                target = [target_pt.pos.x, target_pt.pos.y, atan(target_pt.heading)]
+                err += norm(target[1:2] - state[1:2])^2
+            end
+            if err < opt_cost
+                opt_vec = [k0,k1]
+            end
+        end
+    end
+    opt_vec
 end
 
 end # end RobotModels

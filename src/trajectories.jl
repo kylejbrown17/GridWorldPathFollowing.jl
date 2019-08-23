@@ -49,7 +49,9 @@ export
 
     DenseTrajectory,
     get_index_time,
-    SimpleTrajectory
+    SimpleTrajectory,
+
+    stitch_trajectories
 
 """
     `TimeInterval`
@@ -463,7 +465,7 @@ function get_index_time(traj::DenseTrajectory, t::Float64)
     ds = (traj.pos[idx+1] - traj.pos[idx])
     s = traj.pos[idx]+Δe*ds
     dt = (traj.t_vec[idx+1] - traj.t_vec[idx])
-    if isapprox(ds,0.0)
+    if isapprox(ds,0.0;atol=1e-5)
         return traj.t_vec[idx] + Δe*dt
     end
     return get_time_from_arc_length(traj.traj, s)
@@ -862,6 +864,43 @@ function get_heading(traj::SimpleTrajectory,t::Float64)
 end
 function get_yaw_rate(traj::SimpleTrajectory,t::Float64)
     get_trajectory_point_by_time(traj,t).yaw_rate
+end
+
+"""
+    `stitch_trajectories(traj1::Trajectory,traj2::Trajectory;buffer=[0.0,0.0])`
+
+    Combines two trajectories with a `PivotTrajectory` sandwiched between two
+    `WaitTrajectory` segments.
+"""
+function stitch_trajectories(traj1::Trajectory,traj2::Trajectory;buffer=[0.0,0.0])
+    @assert norm(get_end_pt(traj1) - get_start_pt(traj2)) < 0.000001 "start and end points do not align"
+    @assert buffer[1]+buffer[2] <= get_start_time(traj2) - get_end_time(traj1)
+    θ1 = atan(get_heading(traj1,get_end_time(traj1)))
+    θ2 = atan(get_heading(traj2,get_start_time(traj2)))
+    Δθ = get_angular_offset(θ1,θ2)
+    traj = Trajectory()
+    for seg in traj1.segments
+        push!(traj, seg)
+    end
+    push!(traj, WaitTrajectory(
+        get_end_pt(traj),
+        get_heading(traj,get_end_time(traj)),
+        TimeInterval(get_end_time(traj),get_end_time(traj)+buffer[1]))
+        )
+    push!(traj, PivotTrajectory(
+        get_end_pt(traj),
+        get_heading(traj,get_end_time(traj)),
+        Δθ,TimeInterval(get_end_time(traj),get_start_time(traj2)-buffer[2]))
+        )
+    push!(traj, WaitTrajectory(
+        get_end_pt(traj),
+        get_heading(traj,get_end_time(traj)),
+        TimeInterval(get_end_time(traj),get_start_time(traj2)))
+        )
+    for seg in traj2.segments
+        push!(traj, seg)
+    end
+    return traj
 end
 
 end # module Trajectories
