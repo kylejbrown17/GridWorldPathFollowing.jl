@@ -3,6 +3,7 @@ module RobotModels
 using Parameters
 using Vec, LinearAlgebra
 
+using ..Utils
 using ..Trajectories
 using ..GridPaths
 
@@ -133,7 +134,7 @@ end
     * `state`  - the current state [x, y, θ] of the robot
 """
 function get_action(controller::TrackingController,target::UnicycleState,ff::UnicycleAction,state::UnicycleState,t::Float64)
-    println("get_action(controller::TrackingController,target::UnicycleState,ff::UnicycleAction,state::UnicycleState,t::Float64)")
+    # println("get_action(controller::TrackingController,target::UnicycleState,ff::UnicycleAction,state::UnicycleState,t::Float64)")
     a = controller.a   # 0 < a < vmax - sup_{t >= 0} abs(vr)
     k0 = controller.k0 # k0 > 0
     μ = controller.μ   # μ = 0 or 1
@@ -179,7 +180,7 @@ function get_action(controller::TrackingController,target::UnicycleState,ff::Uni
     return [w, v]
 end
 function get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)
-    println("get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
+    # println("get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
     k = controller.k
     # state (global frame)
     x,y,θ = state[1],state[2],state[3]
@@ -192,7 +193,7 @@ function get_action(controller::PivotController,target::Vector{Float64},ff::Vect
     return [w, v]
 end
 function get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)
-    println("get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
+    # println("get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
     k = controller.k
     # state (global frame)
     x,y,θ = state[1],state[2],state[3]
@@ -206,37 +207,33 @@ function get_action(controller::StabilizeController,target::Vector{Float64},ff::
 end
 
 function get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<: Controller}
-    println("get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<: Controller}")
+    # println("get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<: Controller}")
     target = [ref.pos.x, ref.pos.y, atan(ref.heading)]
     ff = [ref.yaw_rate, norm(ref.vel)]
     get_action(controller,target,ff,state,t)
 end
 function get_action(controller::C,traj::T,state::UnicycleState,t::Float64) where {C<: Controller, T <: AbstractTrajectory}
-    println("get_action(controller::C,traj::T,state::UnicycleState,t::Float64) where {C<: Controller, T <: AbstractTrajectory}")
+    # println("get_action(controller::C,traj::T,state::UnicycleState,t::Float64) where {C<: Controller, T <: AbstractTrajectory}")
     ref = get_trajectory_point_by_time(traj,t)
     get_action(controller,ref,state,t)
 end
 
-function get_action(controller::SwitchingController,traj::DenseTrajectory,state::UnicycleState,t::Float64)
-    println("get_action(controller::SwitchingController,traj::DenseTrajectory,state::UnicycleState,t::Float64)")
-    get_action(controller,get_active_segment(traj,t),state,t)
-end
 function get_action(controller::SwitchingController,traj::Trajectory,state::UnicycleState,t::Float64)
-    println("get_action(controller::SwitchingController,traj::Trajectory,state::UnicycleState,t::Float64)")
+    # println("get_action(controller::SwitchingController,traj::Trajectory,state::UnicycleState,t::Float64)")
     get_action(controller,get_active_segment(traj,t),state,t)
 end
-function get_action(controller::SwitchingController,ref::StraightTrajectory,state::UnicycleState,t::Float64)
-    println("get_action(controller::SwitchingController,ref::StraightTrajectory,state::UnicycleState,t::Float64)")
-    get_action(controller.tracker,ref,state,t)
+const TrackingTraj = Union{StraightTrajectory,ArcTrajectory,DenseTrajectory{StraightTrajectory},DenseTrajectory{ArcTrajectory}}
+function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:TrackingTraj}
+    # println("get_action(controller::SwitchingController,traj::DenseTrajectory,state::UnicycleState,t::Float64)")
+    get_action(controller.tracker,traj,state,t)
 end
-function get_action(controller::SwitchingController,ref::ArcTrajectory,state::UnicycleState,t::Float64)
-    get_action(controller.tracker,ref,state,t)
+const WaitTraj = Union{WaitTrajectory,DenseTrajectory{WaitTrajectory}}
+function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:WaitTraj}
+    get_action(controller.stabilizer,traj,state,t)
 end
-function get_action(controller::SwitchingController,ref::WaitTrajectory,state::UnicycleState,t::Float64)
-    get_action(controller.stabilizer,ref,state,t)
-end
-function get_action(controller::SwitchingController,ref::PivotTrajectory,state::UnicycleState,t::Float64)
-    get_action(controller.pivoter,ref,state,t)
+const PivotTraj = Union{PivotTrajectory,DenseTrajectory{PivotTrajectory}}
+function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:PivotTraj}
+    get_action(controller.pivoter,traj,state,t)
 end
 
 ################################################################################

@@ -51,28 +51,21 @@ let
 
     # Construct a DenseTrajectory that encodes the exact same information as the
     # piecewise constant Trajectory
-    t_vec = Vector{Float64}()
-    vel = Vector{Float64}()
-    pos = Vector{Float64}()
-    s = 0.0
+    traj = Trajectory()
     for seg in traj_.segments
-        push!(t_vec, get_start_time(seg))
-        push!(t_vec,   get_end_time(seg))
-        push!(vel, norm(get_vel(seg,get_start_time(seg))))
-        push!(vel, norm(get_vel(seg,get_end_time(seg))))
-        push!(pos, s)
-        s += get_length(seg)
-        push!(pos, s)
+        t_vec = [get_start_time(seg), get_end_time(seg)]
+        accel = [0.0]
+        vel = [norm(get_vel(seg,get_start_time(seg))), norm(get_vel(seg,get_end_time(seg)))]
+        pos = [0.0, get_length(seg)]
+        push!(traj,DenseTrajectory(seg,t_vec,accel,vel,pos))
     end
-    accel = zeros(length(t_vec)-1)
-    traj = DenseTrajectory(traj_,t_vec,accel,vel,pos)
 
     controller = SwitchingController()
-    state = [0.0,0.0,0.0]
+    state = [0.001,0.001,0.001]
     t = 0.1
     u = get_action(controller,traj,state,t)
 
     model = UnicycleModel()
     dt = 0.1
-    simulate(model,controller,traj,state,0.0,2.0,dt)
+    simulate(model,controller,traj,state,0.01,2.0,dt)
 end

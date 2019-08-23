@@ -405,9 +405,10 @@ let
     # traj = construct_trajectory(grid_path)
     # verify(traj)
     #
-    # t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+    # # t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+    # # dense_traj = DenseTrajectory(traj,t_vec,accel,vel,pos)
+    # dense_traj, t_vec, accel, vel, pos = optimize_velocity_profile(traj)
     #
-    # dense_traj = DenseTrajectory(traj,t_vec,accel,vel,pos)
     # verify(dense_traj)
     # t = 0.5
     # get_length(dense_traj)

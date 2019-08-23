@@ -6,6 +6,7 @@ using Convex, SCS, ECOS
 using NearestNeighbors
 using GraphUtils
 
+using ..Utils
 using ..GridPaths
 
 export
@@ -15,7 +16,6 @@ export
     get_end_time,
     get_Δt,
     TrajectoryPoint,
-    interpolate,
 
     AbstractTrajectory,
     TrajectoryPrimitive,
@@ -51,14 +51,6 @@ export
     get_index_time,
     SimpleTrajectory
 
-
-function linear_interp(v,t)
-    idx = find_index_in_sorted_array(v,t)-1
-    idx = max(1, min(length(v)-1, idx))
-    Δt = (t - v[idx]) / (v[idx+1] - v[idx])
-    return idx, Δt
-end
-
 """
     `TimeInterval`
 
@@ -90,8 +82,7 @@ end
     yaw_rate::Float64   = 0.0
     t::Float64          = NaN
 end
-interpolate(a,b,t) = (1 - t)*a + t*b
-function interpolate(pt1::TrajectoryPoint,pt2::TrajectoryPoint,t::Float64)
+function Utils.interpolate(pt1::TrajectoryPoint,pt2::TrajectoryPoint,t::Float64)
     θ1 = atan(pt1.heading)
     θ2 = atan(pt2.heading)
     Δθ = get_angular_offset(θ1,θ2)
@@ -433,6 +424,81 @@ get_yaw_rate(traj::PivotTrajectory,t::Float64) = get_yaw_rate(ArcTrajectory(traj
 get_time_from_pt(traj::PivotTrajectory,pt::VecE2) = get_time_from_pt(ArcTrajectory(traj),pt)
 
 """
+    `DenseTrajectory`
+
+    Contains an underlying `AbstractTrajectory` with extra information about the
+    acceleration profile (and the resultant velocity and position profiles).
+"""
+struct DenseTrajectory{T<:AbstractTrajectory} <: CompositeTrajectory
+    traj::T
+    t_vec::Vector{Float64}
+    accel::Vector{Float64}
+    vel::Vector{Float64}
+    pos::Vector{Float64}
+end
+get_start_time(traj::DenseTrajectory)   = get_start_time(traj.traj)
+get_end_time(traj::DenseTrajectory)     = get_end_time(traj.traj)
+get_start_pt(traj::DenseTrajectory)     = get_start_pt(traj.traj)
+get_end_pt(traj::DenseTrajectory)       = get_end_pt(traj.traj)
+function verify(traj::DenseTrajectory)
+    verify(traj.traj)
+    @assert isapprox(traj.t_vec[1], get_start_time(traj.traj);atol=1e-10) "start times do not match"
+    @assert isapprox(traj.t_vec[end], get_end_time(traj.traj);atol=1e-10) "end times do not match"
+    @assert isapprox(traj.pos[end], get_length(traj.traj);atol=1e-10) "lengths do not match"
+    @assert length(traj.vel) == length(traj.pos) == length(traj.t_vec) "t_vec, vel, pos have different lengths"
+    @assert length(traj.accel) == max(0,length(traj.t_vec)-1) "vel and pos have different lengths"
+end
+get_length(traj::DenseTrajectory) = get_length(traj.traj)
+function get_dist(traj::DenseTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t_vec, t)
+    # This could be replaced with precise integration of accel and vel signals...
+    s = interpolate(traj.pos[idx], traj.pos[idx+1], Δe)
+    return s
+end
+"""
+    `get_index_time(traj::DenseTrajectory, t::Float64)`
+"""
+function get_index_time(traj::DenseTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t_vec, t)
+    ds = (traj.pos[idx+1] - traj.pos[idx])
+    s = traj.pos[idx]+Δe*ds
+    dt = (traj.t_vec[idx+1] - traj.t_vec[idx])
+    if isapprox(ds,0.0)
+        return traj.t_vec[idx] + Δe*dt
+    end
+    return get_time_from_arc_length(traj.traj, s)
+end
+function get_position(traj::DenseTrajectory, t::Float64)
+    t_idx = get_index_time(traj,t)
+    get_position(traj.traj, t_idx)
+end
+function get_heading(traj::DenseTrajectory, t::Float64)
+    t_idx = get_index_time(traj,t)
+    get_heading(traj.traj, t_idx)
+end
+function get_vel(traj::DenseTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t_vec, t)
+    v = interpolate(traj.vel[idx], traj.vel[idx+1],Δe)
+    return v * get_heading(traj,t)
+end
+function get_accel(traj::DenseTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t_vec, t)
+    a = interpolate(traj.accel[idx], traj.accel[idx+1],Δe)
+    return a
+end
+function get_yaw_rate(traj::DenseTrajectory,t::Float64)
+    v_true = norm(get_vel(traj, t))
+    t_idx = get_index_time(traj,t)
+    v_nominal = norm(get_vel(traj.traj, t_idx))
+    yw_nominal = get_yaw_rate(traj.traj, t_idx)
+    if v_nominal != 0
+        return yw_nominal * (v_true / v_nominal)
+    else
+        return yw_nominal
+    end
+end
+
+"""
     `Trajectory`
 """
 @with_kw struct Trajectory <: CompositeTrajectory
@@ -722,85 +788,25 @@ function optimize_velocity_profile(traj::Trajectory;
 
     @assert problem.status == :Optimal "Optimization failed: problem.status != :Optimal"
 
+    new_traj = Trajectory()
+    s0 = 0.0
+    for (i,seg) in enumerate(traj.segments)
+        t_vec = t[i] .+ (dt[i]/m)*collect(0:m)
+        accel = a[i].value[:]
+        vel = v[i].value[:]
+        pos = s[i].value[:] .- s0
+        push!(new_traj, DenseTrajectory(seg,t_vec,accel,vel,pos))
+        s0 += pos[end]
+    end
+    # return new_traj
     t_vec = [0, vcat([t[i] .+ (dt[i]/m)*collect(1:m) for i in 1:N]...)...]
     accel = vcat([a[i].value[:] for i in 1:N]...)
     vel = [vcat([v[i].value[1:end-1] for i in 1:N]...)..., v[end].value[end]]
     pos = [vcat([s[i].value[1:end-1] for i in 1:N]...)..., s[end].value[end]]
 
-    return t_vec, accel, vel, pos
+    return new_traj, t_vec, accel, vel, pos
 end
 
-"""
-    `DenseTrajectory`
-
-    Contains an underlying `Trajectory` with extra information about the
-    acceleration profile (and the resultant velocity and position profiles).
-"""
-struct DenseTrajectory <: CompositeTrajectory
-    traj::Trajectory
-    t_vec::Vector{Float64}
-    accel::Vector{Float64}
-    vel::Vector{Float64}
-    pos::Vector{Float64}
-end
-get_start_time(traj::DenseTrajectory)   = get_start_time(traj.traj)
-get_end_time(traj::DenseTrajectory)     = get_end_time(traj.traj)
-get_start_pt(traj::DenseTrajectory)     = get_start_pt(traj.traj)
-get_end_pt(traj::DenseTrajectory)       = get_end_pt(traj.traj)
-function verify(traj::DenseTrajectory)
-    verify(traj.traj)
-    @assert isapprox(traj.t_vec[1], get_start_time(traj.traj)) "start times do not match"
-    @assert isapprox(traj.t_vec[end], get_end_time(traj.traj)) "end times do not match"
-    @assert isapprox(traj.pos[end], get_length(traj.traj)) "lengths do not match"
-    @assert length(traj.vel) == length(traj.pos) == length(traj.t_vec) "t_vec, vel, pos have different lengths"
-    @assert length(traj.accel) == max(0,length(traj.t_vec)-1) "vel and pos have different lengths"
-end
-get_length(traj::DenseTrajectory) = get_length(traj.traj)
-function get_dist(traj::DenseTrajectory, t::Float64)
-    idx, Δe = linear_interp(traj.t_vec, t)
-    # This could be replaced with precise integration of accel and vel signals...
-    s = traj.pos[idx] + (traj.pos[idx+1] - traj.pos[idx]) * Δe
-    return s
-end
-"""
-    `get_index_time(traj::DenseTrajectory, t::Float64)`
-"""
-function get_index_time(traj::DenseTrajectory, t::Float64)
-    idx, Δe = linear_interp(traj.t_vec, t)
-    ds = (traj.pos[idx+1] - traj.pos[idx])
-    s = traj.pos[idx]+Δe*ds
-    dt = (traj.t_vec[idx+1] - traj.t_vec[idx])
-    if isapprox(ds,0.0)
-        return traj.t_vec[idx] + Δe*dt
-    end
-    return get_time_from_arc_length(traj.traj, s)
-end
-function get_position(traj::DenseTrajectory, t::Float64)
-    t_idx = get_index_time(traj,t)
-    get_position(traj.traj, t_idx)
-end
-function get_heading(traj::DenseTrajectory, t::Float64)
-    t_idx = get_index_time(traj,t)
-    get_heading(traj.traj, t_idx)
-end
-function get_vel(traj::DenseTrajectory, t::Float64)
-    idx, Δe = linear_interp(traj.t_vec, t)
-    v = traj.vel[idx] + (traj.vel[idx+1] - traj.vel[idx]) * Δe
-    return v * get_heading(traj,t)
-end
-function get_yaw_rate(traj::DenseTrajectory,t::Float64)
-    # s = get_dist(traj, t)
-    v_true = norm(get_vel(traj, t))
-    # t_idx = get_time_from_arc_length(traj.traj,s)
-    t_idx = get_index_time(traj,t)
-    v_nominal = norm(get_vel(traj.traj, t_idx))
-    yw_nominal = get_yaw_rate(traj.traj, t_idx)
-    if v_nominal != 0
-        return yw_nominal * (v_true / v_nominal)
-    else
-        return yw_nominal
-    end
-end
 
 struct SimpleTrajectory <: AbstractTrajectory
     pts ::Vector{TrajectoryPoint}

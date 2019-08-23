@@ -50,6 +50,9 @@ end
 # Define package tests
 @time @testset "GridWorldPathFollowing Package Tests" begin
     testdir = joinpath(dirname(@__DIR__), "test")
+    @time @testset "GridWorldPathFollowing.Utils" begin
+        include(joinpath(testdir, "test_utils.jl"))
+    end
     @time @testset "GridWorldPathFollowing.GridPaths" begin
         include(joinpath(testdir, "test_grid_paths.jl"))
     end
