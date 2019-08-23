@@ -322,7 +322,6 @@ let
 end
 # DenseTrajectory
 let
-
     t1 = 0.0
     t2 = 1.0
     interval = TimeInterval(t1,t2)

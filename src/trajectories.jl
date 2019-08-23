@@ -16,8 +16,12 @@ export
     get_Δt,
     TrajectoryPoint,
     interpolate,
+
     AbstractTrajectory,
+    TrajectoryPrimitive,
+    CompositeTrajectory,
     EmptyPrimitive,
+
     get_Δt,
     get_start_pt,
     get_end_pt,
@@ -111,6 +115,7 @@ end
 
 abstract type AbstractTrajectory end
 abstract type TrajectoryPrimitive <: AbstractTrajectory end
+abstract type CompositeTrajectory <: AbstractTrajectory end
 struct EmptyPrimitive <: AbstractTrajectory end
 """
     `get_start_time`
@@ -430,7 +435,7 @@ get_time_from_pt(traj::PivotTrajectory,pt::VecE2) = get_time_from_pt(ArcTrajecto
 """
     `Trajectory`
 """
-@with_kw struct Trajectory <: AbstractTrajectory
+@with_kw struct Trajectory <: CompositeTrajectory
     t_vec::Vector{Float64}               = Vector{Float64}() # time vector
     s_vec::Vector{Float64}               = Vector{Float64}() # arc length vector
     segments::Vector{AbstractTrajectory} = Vector{AbstractTrajectory}()
@@ -731,7 +736,7 @@ end
     Contains an underlying `Trajectory` with extra information about the
     acceleration profile (and the resultant velocity and position profiles).
 """
-struct DenseTrajectory <: AbstractTrajectory
+struct DenseTrajectory <: CompositeTrajectory
     traj::Trajectory
     t_vec::Vector{Float64}
     accel::Vector{Float64}
