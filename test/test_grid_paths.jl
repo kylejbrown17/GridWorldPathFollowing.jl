@@ -1,7 +1,7 @@
 let
-    for i in 1:5
-        GridTransition(i)
-    end
+    # for i in 1:5
+    #     GridTransition(i)
+    # end
 end
 let
     GridWaypoint(0.0,0.0,0.0,GridTransition(1))

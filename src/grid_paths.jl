@@ -14,11 +14,11 @@ export
     construct_grid_world_path
 
 @enum GridTransition begin
-    EAST   = 1
-    NORTH      = 2
-    WEST    = 3
-    SOUTH    = 4
-    WAIT    = 5
+    EAST    = 0
+    NORTH   = 1
+    WEST    = 2
+    SOUTH   = 3
+    WAIT    = 4
 end
 """
     `get_translation`

@@ -46,6 +46,7 @@ export
     get_active_segment,
     construct_trajectory,
     optimize_velocity_profile,
+    optimize_velocity_profile_traj_only,
 
     DenseTrajectory,
     get_index_time,
@@ -711,6 +712,63 @@ function construct_trajectory(path::GridWorldPath)
     return traj
 end
 
+struct SimpleTrajectory <: AbstractTrajectory
+    pts ::Vector{TrajectoryPoint}
+    t   ::Vector{Float64}
+    s   ::Vector{Float64}
+end
+function SimpleTrajectory(traj::T,t_range) where {T <: AbstractTrajectory}
+    pts     = Vector{TrajectoryPoint}()
+    t_vec   = Vector{Float64}()
+    s       = Vector{Float64}()
+    for (i,t) in enumerate(t_range)
+        push!(pts, get_trajectory_point_by_time(traj,t))
+        push!(s, get_dist(traj,t))
+        push!(t_vec, t)
+    end
+    SimpleTrajectory(pts,t_vec,s)
+end
+function SimpleTrajectory(traj::T,Δt::Float64) where{T <: AbstractTrajectory}
+    t0 = get_start_time(traj)
+    tf = get_end_time(traj)
+    t_range = collect(t0:Δt:tf)
+    SimpleTrajectory(traj,t_range)
+end
+function SimpleTrajectory(traj::T,N::Int) where{T <: AbstractTrajectory}
+    t0 = get_start_time(traj)
+    tf = get_end_time(traj)
+    t_range = [t0 + (tf-t0)*(i/(N-1)) for i in 0:N-1]
+    SimpleTrajectory(traj,t_range)
+end
+function verify(traj::SimpleTrajectory)
+    @assert length(traj.t) == length(traj.s) == length(traj.pts) "lengths do not match"
+end
+get_start_time(traj::SimpleTrajectory)  = traj.t[1]
+get_end_time(traj::SimpleTrajectory)    = traj.t[end]
+get_start_pt(traj::SimpleTrajectory)    = traj.pts[1]
+get_end_pt(traj::SimpleTrajectory)      = traj.pts[end]
+function get_trajectory_point_by_time(traj::SimpleTrajectory,t::Float64)
+    idx,Δe = linear_interp(traj.t,t)
+    pt = interpolate(traj.pts[idx],traj.pts[idx+1],Δe)
+end
+function get_dist(traj::SimpleTrajectory, t::Float64)
+    idx, Δe = linear_interp(traj.t, t)
+    interpolate(traj.s[idx],traj.s[idx+1], Δe)
+end
+function get_position(traj::SimpleTrajectory,t::Float64)
+    get_trajectory_point_by_time(traj,t).pos
+end
+function get_vel(traj::SimpleTrajectory,t::Float64)
+    get_trajectory_point_by_time(traj,t).vel
+end
+function get_heading(traj::SimpleTrajectory,t::Float64)
+    get_trajectory_point_by_time(traj,t).heading
+end
+function get_yaw_rate(traj::SimpleTrajectory,t::Float64)
+    get_trajectory_point_by_time(traj,t).yaw_rate
+end
+
+
 """
     `optimize_velocity_profile(traj::Trajectory)`
 
@@ -797,7 +855,7 @@ function optimize_velocity_profile(traj::Trajectory;
         accel = a[i].value[:]
         vel = v[i].value[:]
         pos = s[i].value[:] .- s0
-        push!(new_traj, DenseTrajectory(seg,t_vec,accel,vel,pos))
+        push!(new_traj, DenseTrajectory(deepcopy(seg),t_vec,accel,vel,pos)) # using deepcopy to prevent the old pointers from lingering when embedding in c
         s0 += pos[end]
     end
     # return new_traj
@@ -809,62 +867,17 @@ function optimize_velocity_profile(traj::Trajectory;
     return new_traj, t_vec, accel, vel, pos
 end
 
+function optimize_velocity_profile_traj_only(traj::Trajectory;
+    m::Int=8,
+    n::Int = 0,
+    a_max::Float64 = 2.0,
+    verbose=false
+    )
+    new_traj, t_vec, accel, vel, pos = optimize_velocity_profile(traj;
+        m=m,n=n,a_max=a_max,verbose=verbose)
+    return new_traj
+end
 
-struct SimpleTrajectory <: AbstractTrajectory
-    pts ::Vector{TrajectoryPoint}
-    t   ::Vector{Float64}
-    s   ::Vector{Float64}
-end
-function SimpleTrajectory(traj::T,t_range) where {T <: AbstractTrajectory}
-    pts     = Vector{TrajectoryPoint}()
-    t_vec   = Vector{Float64}()
-    s       = Vector{Float64}()
-    for (i,t) in enumerate(t_range)
-        push!(pts, get_trajectory_point_by_time(traj,t))
-        push!(s, get_dist(traj,t))
-        push!(t_vec, t)
-    end
-    SimpleTrajectory(pts,t_vec,s)
-end
-function SimpleTrajectory(traj::T,Δt::Float64) where{T <: AbstractTrajectory}
-    t0 = get_start_time(traj)
-    tf = get_end_time(traj)
-    t_range = collect(t0:Δt:tf)
-    SimpleTrajectory(traj,t_range)
-end
-function SimpleTrajectory(traj::T,N::Int) where{T <: AbstractTrajectory}
-    t0 = get_start_time(traj)
-    tf = get_end_time(traj)
-    t_range = [t0 + (tf-t0)*(i/(N-1)) for i in 0:N-1]
-    SimpleTrajectory(traj,t_range)
-end
-function verify(traj::SimpleTrajectory)
-    @assert length(traj.t) == length(traj.s) == length(traj.pts) "lengths do not match"
-end
-get_start_time(traj::SimpleTrajectory)  = traj.t[1]
-get_end_time(traj::SimpleTrajectory)    = traj.t[end]
-get_start_pt(traj::SimpleTrajectory)    = traj.pts[1]
-get_end_pt(traj::SimpleTrajectory)      = traj.pts[end]
-function get_trajectory_point_by_time(traj::SimpleTrajectory,t::Float64)
-    idx,Δe = linear_interp(traj.t,t)
-    pt = interpolate(traj.pts[idx],traj.pts[idx+1],Δe)
-end
-function get_dist(traj::SimpleTrajectory, t::Float64)
-    idx, Δe = linear_interp(traj.t, t)
-    interpolate(traj.s[idx],traj.s[idx+1], Δe)
-end
-function get_position(traj::SimpleTrajectory,t::Float64)
-    get_trajectory_point_by_time(traj,t).pos
-end
-function get_vel(traj::SimpleTrajectory,t::Float64)
-    get_trajectory_point_by_time(traj,t).vel
-end
-function get_heading(traj::SimpleTrajectory,t::Float64)
-    get_trajectory_point_by_time(traj,t).heading
-end
-function get_yaw_rate(traj::SimpleTrajectory,t::Float64)
-    get_trajectory_point_by_time(traj,t).yaw_rate
-end
 
 """
     `stitch_trajectories(traj1::Trajectory,traj2::Trajectory;buffer=[0.0,0.0])`

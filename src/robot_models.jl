@@ -15,13 +15,18 @@ export
     UnicycleState,
     UnicycleAction,
 
+    get_state,
     dynamics,
+    convert_to_wheel_velocities,
 
     Controller,
     TrackingController,
     StabilizeController,
     PivotController,
     SwitchingController,
+
+    UnicycleController,
+    construct_unicycle_controller,
 
     get_action,
     simulate
@@ -43,9 +48,24 @@ sat(x,δ) = abs(x) <= δ ? x : sign(x)*δ
 
 abstract type AbstractRobotModel end
 
-struct UnicycleModel <: AbstractRobotModel end
+"""
+    `UnicycleModel`
+
+    Default parameters are based on the Khepera IV Robot in the Webots simulator
+"""
+@with_kw struct UnicycleModel <: AbstractRobotModel
+    track_width ::Float64 = 0.1054
+    wheel_radius::Float64 = 0.021
+end
 const UnicycleState = Vector{Float64}
 const UnicycleAction = Vector{Float64}
+function get_state(model::UnicycleModel,pt::TrajectoryPoint)
+    state = [pt.pos.x, pt.pos.y, atan(pt.heading)]
+end
+function get_state(model::UnicycleModel,traj::T,t::Float64) where {T<:AbstractTrajectory}
+    ref = get_trajectory_point_by_time(traj,t)
+    get_state(model,ref)
+end
 function dynamics(model::UnicycleModel,state,cmd)
     x = state[1]
     y = state[2]
@@ -53,6 +73,15 @@ function dynamics(model::UnicycleModel,state,cmd)
     w = cmd[1]
     v = cmd[2]
     sdot = [v*cos(θ),v*sin(θ),w]
+end
+function convert_to_wheel_velocities(model::UnicycleModel,cmd::UnicycleAction)
+    w = cmd[1]
+    v = cmd[2]
+    L = model.track_width
+    r = model.wheel_radius
+
+    v_wheels = [v - w*(L/2), v + w*(L/2)] # velocity at wheels
+    w_wheels = v_wheels / r # rotational velocity of wheels
 end
 ################################################################################
 ################################## Controllers #################################
@@ -123,6 +152,27 @@ end
     tracker     ::TrackingController    = TrackingController()
     pivoter     ::PivotController       = PivotController()
     stabilizer  ::StabilizeController   = StabilizeController()
+end
+
+"""
+    `UnicycleController`
+"""
+struct UnicycleController{T<:AbstractTrajectory,C<:Controller} <: Controller
+    model::UnicycleModel
+    traj::T
+    controller::C
+end
+function construct_unicycle_controller(model::UnicycleModel,traj::T,controller::C) where {T<:AbstractTrajectory,C<:Controller}
+    UnicycleController(model,traj,controller)
+end
+function construct_unicycle_controller(model::UnicycleModel,path::GridWorldPath,controller::C) where {C <: Controller}
+    base_traj = construct_trajectory(path)
+    traj = optimize_velocity_profile_traj_only(base_traj)
+    UnicycleController(model,traj,controller)
+end
+function get_action(controller::C,state::UnicycleState,t::Float64) where {C <: UnicycleController}
+    cmd = get_action(controller.controller,controller.traj,state,t)
+    w_cmd = convert_to_wheel_velocities(controller.model,cmd)
 end
 
 """
@@ -213,7 +263,7 @@ end
 """
     `get_action(controller::stabilizeController,target,ff,state,t)`
 
-    A simple control law to stabilize about a static pose. 
+    A simple control law to stabilize about a static pose.
 
     Inputs:
     * `target` - the current reference point [xr, yr, θr] of the tracked trajectory
@@ -244,7 +294,7 @@ end
 
 function get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<: Controller}
     # println("get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<: Controller}")
-    target = [ref.pos.x, ref.pos.y, atan(ref.heading)]
+    target = get_state(UnicycleModel(),ref) # [ref.pos.x, ref.pos.y, atan(ref.heading)]
     ff = [ref.yaw_rate, norm(ref.vel)]
     get_action(controller,target,ff,state,t)
 end
