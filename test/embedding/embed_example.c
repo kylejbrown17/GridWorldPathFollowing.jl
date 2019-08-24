@@ -4,18 +4,12 @@
 JULIA_DEFINE_FAST_TLS()
 // Compile this progam into an executable called embed_example by running the following command:
 // ~/.local/opt/julia-1.0.2/share/julia/julia-config.jl --cflags --ldflags --ldlibs | xargs gcc -o ~/Desktop/embed_example ~/Desktop/embed_example.c
-enum TRANSITION{EAST,NORTH,WEST,SOUTH,WAIT};
+// enum TRANSITION{EAST,NORTH,WEST,SOUTH,WAIT};
 
 int main(int argc, char *argv[])
 {
   /* required: setup the Julia context */
   jl_init();
-  // (void)jl_gc_enable(0);
-
-  // Initialize refs dict to protect objects from being Garbage Collected
-  // jl_value_t* refs = jl_eval_string("refs = IdDict()");
-  // jl_function_t* setindex = jl_get_function(jl_base_module, "setindex!");
-  // jl_datatype_t* reft = (jl_datatype_t*)jl_eval_string("Base.RefValue{Any}");
 
   /* run Julia commands */
   jl_eval_string("using Vec");
@@ -33,18 +27,27 @@ int main(int argc, char *argv[])
   jl_function_t *optimize_velocity_profile_traj_only = jl_get_function(GridWorldPathFollowing, "optimize_velocity_profile_traj_only");
   jl_value_t *traj = jl_call1(optimize_velocity_profile_traj_only, base_traj);
 
-  // (void)jl_eval_string("println(\"HELLO\")");
-  // (void)jl_eval_string("println(typeof(refs))");
-  // (void)jl_eval_string("println(get_length(base_traj))");
-  // (void)jl_eval_string("println(get_end_time(base_traj))");
-  // (void)jl_eval_string("println(get_vel(base_traj,0.5))");
+  // initialize the controller and robot model
+  jl_value_t *controller = jl_eval_string("SwitchingController()");
+  jl_value_t *model = jl_eval_string("UnicycleModel()");
+  if (jl_exception_occurred())
+    printf("Exception occured: %s \n", jl_typeof_str(jl_exception_occurred()));
 
-  // (void)jl_gc_enable(1);
-  // (void)jl_gc_collect();
-  // // initialize the controller
-  // jl_value_t *controller = jl_eval_string("SwitchingController()");
+  double state[] = {0.0,0.1,0.0};
+  jl_value_t* array_type = jl_apply_array_type((jl_value_t*)jl_float64_type, 1);
+  jl_array_t *state_vec = jl_ptr_to_array_1d(array_type, state, 10, 0);
 
-  // jl_value_t *model = jl_eval_string("UnicycleModel()");
+  jl_function_t *get_action = jl_get_function(GridWorldPathFollowing, "get_action");
+  jl_value_t *t = jl_box_float64(3.0); // time
+  jl_value_t *f_args[4] = {NULL};
+  f_args[0] = controller;
+  f_args[1] = traj;
+  f_args[2] = (jl_value_t*)state_vec;
+  f_args[3] = t;
+  jl_array_t *cmd = (jl_array_t*)jl_call(get_action,f_args,4);
+  double *cmdData = (double*)jl_array_data(cmd);
+
+  printf("cmd: w=%f,v=%f\n", cmdData[0], cmdData[1]);
 
   // const double start_pt[] = {0.0,0.0};
   // jl_value_t *start_time = jl_box_float64(0.0);
