@@ -44,10 +44,17 @@ int main(int argc, char *argv[])
   f_args[1] = traj;
   f_args[2] = (jl_value_t*)state_vec;
   f_args[3] = t;
-  jl_array_t *cmd = (jl_array_t*)jl_call(get_action,f_args,4);
-  double *cmdData = (double*)jl_array_data(cmd);
+  jl_value_t *cmd = jl_call(get_action,f_args,4);
+  jl_array_t *cmd_array = (jl_array_t*)cmd;
+  double *cmd_data = (double*)jl_array_data(cmd_array);
+  printf("cmd: w=%f,v=%f\n", cmd_data[0], cmd_data[1]);
 
-  printf("cmd: w=%f,v=%f\n", cmdData[0], cmdData[1]);
+  jl_function_t *UnicycleController = jl_get_function(GridWorldPathFollowing,"UnicycleController");
+  jl_value_t *robot_controller = jl_call3(UnicycleController,model,traj,controller);
+  jl_value_t *wheel_speed_cmd = jl_call3(get_action,robot_controller,(jl_value_t*)state_vec,t);
+  jl_array_t *wheel_speed_cmd_array = (jl_array_t*)wheel_speed_cmd;
+  double *wheel_speed_cmd_data = (double*)jl_array_data(wheel_speed_cmd_array);
+  printf("cmd: v_left=%f,v_right=%f\n", wheel_speed_cmd_data[0], wheel_speed_cmd_data[1]);
 
   // const double start_pt[] = {0.0,0.0};
   // jl_value_t *start_time = jl_box_float64(0.0);
