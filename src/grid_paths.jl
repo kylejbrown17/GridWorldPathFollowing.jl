@@ -1,6 +1,7 @@
 module GridPaths
 
 using Vec
+using Parameters
 
 export
     GridTransition,
@@ -102,19 +103,19 @@ GridWaypoint(x::Float64,y::Float64,t::Float64,a::GridTransition) = GridWaypoint(
 """
     `GridWorldPath`
 """
-struct GridWorldPath
-    start_pt::VecE2
-    start_time::Float64
-    waypoints::Vector{GridWaypoint}
+@with_kw struct GridWorldPath
+    start_pt::VecE2                 = VecE2()
+    start_time::Float64             = 0.0
+    waypoints::Vector{GridWaypoint} = Vector{GridWaypoint}()
     # environment parameters
-    cellwidth::Float64
+    cellwidth::Float64              = 1.0
 end
 function construct_grid_world_path(
     start_pt::VecE2,
     start_time::Float64,
-    transitions::Vector{GridTransition},
     cellwidth::Float64,
-    transition_time::Float64=1.0)
+    transition_time::Float64,
+    transitions::Vector{GridTransition})
     waypoints = Vector{GridWaypoint}()
     pt = start_pt
     t = start_time
@@ -125,7 +126,48 @@ function construct_grid_world_path(
         pt = next_pt
         t = next_t
     end
-    GridWorldPath(start_pt, start_time, waypoints, cellwidth)
+    GridWorldPath(
+        start_pt=start_pt,
+        start_time=start_time,
+        waypoints=waypoints,
+        cellwidth=cellwidth)
+end
+function construct_grid_world_path(
+    start_pt::VecE2,
+    start_time::Float64,
+    transitions::Vector{GridTransition},
+    cellwidth::Float64,
+    transition_time::Float64=1.0)
+    construct_grid_world_path(start_pt,start_time,cellwidth,transition_time,transitions)
+end
+function construct_grid_world_path(
+    x0::Float64,
+    y0::Float64,
+    t0::Float64,
+    cellwidth::Float64,
+    transition_time::Float64,
+    transitions::Vector{GridTransition}
+    )
+    construct_grid_world_path(
+        VecE2(x0,y0),
+        t0,
+        cellwidth,
+        transition_time,
+        transitions
+        )
+end
+function construct_grid_world_path(
+    x0::Float64,
+    y0::Float64,
+    t0::Float64,
+    cellwidth::Float64,
+    transition_time::Float64,
+    transitions::Vector{Int}
+    )
+    construct_grid_world_path(
+        x0, y0, t0, cellwidth, transition_time,
+        map(i->GridTransition(i),transitions)
+        )
 end
 
 end # End of module Paths

@@ -12,6 +12,7 @@ export
     sat,
 
     UnicycleModel,
+    unicycle_model,
     UnicycleState,
     UnicycleAction,
 
