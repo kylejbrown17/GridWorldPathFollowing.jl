@@ -12,6 +12,9 @@ interpolate(a,b,t) = (1 - t)*a + t*b
 function linear_interp(v,t)
     idx = find_index_in_sorted_array(v,t)-1
     idx = max(1, min(length(v)-1, idx))
+    if isapprox(v[idx+1] - v[idx],0.0)
+        return idx,0.0
+    end
     Δt = (t - v[idx]) / (v[idx+1] - v[idx])
     return idx, Δt
 end

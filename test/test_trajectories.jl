@@ -286,6 +286,31 @@ let
     get_yaw_rate(traj,t1)
     get_yaw_rate(traj,t3)
 end
+# cap_trajectory
+let
+    t1 = 0.0
+    t2 = 1.0
+    t = 0.5
+    p1 = VecE2(0.0,0.0)
+    p2 = VecE2(0.0,1.0)
+    heading = (p2-p1)/norm(p2-p1)
+    arclength = norm(p2-p1)
+    seg1 = StraightTrajectory(p1,heading,arclength,TimeInterval(t1,t2))
+
+    t3 = 2.0
+    center = VecE2(-1.0,1.0)
+    radius = 1.0
+    θ1 = 0.0
+    Δθ = π/2
+    θ2 = θ1 + Δθ
+    seg2 = ArcTrajectory(center,p2,get_heading(seg1,get_end_time(seg1)),Δθ,TimeInterval(t2,t3))
+
+    traj = Trajectory()
+    push!(traj,seg1)
+    push!(traj,seg2)
+    verify(traj)
+    verify(cap_trajectory(traj))
+end
 # hierarchical Trajectory
 let
 end

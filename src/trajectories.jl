@@ -31,6 +31,8 @@ export
     get_heading,
     get_vel,
     get_yaw_rate,
+    verify_abstract_traj,
+
     get_time_from_arc_length,
     get_time_from_pt,
     get_trajectory_point_by_time,
@@ -44,6 +46,7 @@ export
     Trajectory,
     get_active_segment_idx,
     get_active_segment,
+    cap_trajectory,
     construct_trajectory,
     optimize_velocity_profile,
     optimize_velocity_profile_traj_only,
@@ -66,7 +69,13 @@ struct TimeInterval
 end
 get_start_time(interval::TimeInterval) = interval.t1
 get_end_time(interval::TimeInterval) = interval.t2
-get_Δt(i::TimeInterval,t::Float64) = (t - i.t1) / (i.t2 - i.t1)
+function get_Δt(i::TimeInterval,t::Float64)
+    dt = (i.t2 - i.t1)
+    if dt == 0.0
+        return 0.0
+    end
+    return (t - i.t1) / dt
+ end
 function verify(i::TimeInterval)
     @assert (
         get_start_time(i) <= get_end_time(i)
@@ -234,6 +243,15 @@ function get_vel end
     AbstractTrajectory
 """
 function get_yaw_rate end
+function verify_abstract_traj(traj::T) where {T<:AbstractTrajectory}
+    t_mid = (get_start_time(traj)+get_end_time(traj))/2.0
+    @assert !isnan(get_yaw_rate(traj,t_mid)) "get_yaw_rate is NaN"
+    @assert !isnan(get_dist(traj,t_mid)) "get_dist is NaN"
+    @assert !any(isnan,get_position(traj,t_mid)) "get_position is NaN"
+    @assert !any(isnan,get_heading(traj,t_mid)) "get_heading is NaN"
+    @assert !any(isnan,get_vel(traj,t_mid)) "get_vel is NaN"
+end
+
 """
     `get_active_segment(traj::T,t::Float64) where {T <: AbstractTrajectory}`
 
@@ -265,6 +283,7 @@ get_end_pt(traj::StraightTrajectory) = traj.pt1 + traj.length * traj.heading
 function verify(traj::StraightTrajectory)
     @assert (!any(isnan, get_start_pt(traj))) "start point is NaN"
     @assert (!any(isnan, get_end_pt(traj))) "end point is NaN"
+    verify_abstract_traj(traj)
     verify(traj.interval)
 end
 function get_length(traj::StraightTrajectory)
@@ -272,7 +291,7 @@ function get_length(traj::StraightTrajectory)
 end
 function get_dist(traj::StraightTrajectory, t::Float64)
     dt = get_end_time(traj) - get_start_time(traj)
-    return get_length(traj)*(t-get_start_time(traj)) / dt
+    return get_length(traj) * get_Δt(traj,t)
 end
 function get_position(traj::StraightTrajectory,t::Float64)
     p1 = get_start_pt(traj)
@@ -289,6 +308,9 @@ function get_vel(traj::StraightTrajectory, t::Float64)
     # vec = get_end_pt(traj) - get_start_pt(traj)
     vec = get_heading(traj,t) * get_length(traj)
     dt = get_end_time(traj) - get_start_time(traj)
+    if get_length(traj) == 0
+        return VecE2(0.0,0.0)
+    end
     return vec / dt
 end
 function get_yaw_rate(traj::StraightTrajectory,t::Float64)
@@ -338,6 +360,7 @@ function verify(traj::ArcTrajectory)
     @assert (0.0 <= traj.θ1 <= 2π) "θ1 is outside of [0,2π]"
     # @assert (0.0 <= traj.θ2 <= 2π) "θ2 is outside of [0,2π]"
     @assert (traj.radius >= 0.0) "radius is negative"
+    verify_abstract_traj(traj)
     verify(traj.interval)
 end
 get_start_pt(traj::ArcTrajectory) = traj.center + traj.radius*VecE2(cos(traj.θ1),sin(traj.θ1))
@@ -347,7 +370,7 @@ function get_length(traj::ArcTrajectory)
 end
 function get_dist(traj::ArcTrajectory, t::Float64)
     dt = get_end_time(traj) - get_start_time(traj)
-    return get_length(traj) * (t-get_start_time(traj)) / dt
+    return get_length(traj) * get_Δt(traj,t) #(t-get_start_time(traj)) / dt
 end
 function get_position(traj::ArcTrajectory,t::Float64)
     θ = traj.θ1 + get_Δt(traj,t) * traj.Δθ
@@ -393,11 +416,11 @@ end
 get_start_pt(traj::WaitTrajectory) = get_start_pt(StraightTrajectory(traj))
 get_end_pt(traj::WaitTrajectory) = get_end_pt(StraightTrajectory(traj))
 verify(traj::WaitTrajectory) = verify(StraightTrajectory(traj))
-get_length(traj::WaitTrajectory) = get_length(StraightTrajectory(traj))
-get_dist(traj::WaitTrajectory, t::Float64) = get_dist(StraightTrajectory(traj), t)
-get_position(traj::WaitTrajectory,t::Float64) = get_position(StraightTrajectory(traj),t)
-get_heading(traj::WaitTrajectory,t::Float64) = get_heading(StraightTrajectory(traj),t)
-get_vel(traj::WaitTrajectory, t::Float64) = get_vel(StraightTrajectory(traj), t)
+get_length(traj::WaitTrajectory) = 0.0
+get_dist(traj::WaitTrajectory, t::Float64) = 0.0
+get_position(traj::WaitTrajectory,t::Float64) = traj.pt1
+get_heading(traj::WaitTrajectory,t::Float64) = traj.heading
+get_vel(traj::WaitTrajectory, t::Float64) = VecE2(0.0,0.0)
 get_yaw_rate(traj::WaitTrajectory,t::Float64) = get_yaw_rate(StraightTrajectory(traj),t)
 get_time_from_pt(traj::WaitTrajectory,pt::VecE2) = get_time_from_pt(StraightTrajectory(traj),pt)
 
@@ -420,9 +443,9 @@ get_end_pt(traj::PivotTrajectory) = get_end_pt(ArcTrajectory(traj))
 verify(traj::PivotTrajectory) = verify(ArcTrajectory(traj))
 get_length(traj::PivotTrajectory) = get_length(ArcTrajectory(traj))
 get_dist(traj::PivotTrajectory, t::Float64) = get_dist(ArcTrajectory(traj), t)
-get_position(traj::PivotTrajectory,t::Float64) = get_position(ArcTrajectory(traj),t)
+get_position(traj::PivotTrajectory,t::Float64) = traj.pt1
 get_heading(traj::PivotTrajectory,t::Float64) = get_heading(ArcTrajectory(traj),t)
-get_vel(traj::PivotTrajectory, t::Float64) = get_vel(ArcTrajectory(traj), t)
+get_vel(traj::PivotTrajectory, t::Float64) = VecE2(0.0,0.0)
 get_yaw_rate(traj::PivotTrajectory,t::Float64) = get_yaw_rate(ArcTrajectory(traj),t)
 get_time_from_pt(traj::PivotTrajectory,pt::VecE2) = get_time_from_pt(ArcTrajectory(traj),pt)
 
@@ -450,11 +473,15 @@ function verify(traj::DenseTrajectory)
     @assert isapprox(traj.pos[end], get_length(traj.traj);atol=1e-10) "lengths do not match"
     @assert length(traj.vel) == length(traj.pos) == length(traj.t_vec) "t_vec, vel, pos have different lengths"
     @assert length(traj.accel) == max(0,length(traj.t_vec)-1) "vel and pos have different lengths"
+    verify_abstract_traj(traj)
 end
 get_length(traj::DenseTrajectory) = get_length(traj.traj)
 function get_dist(traj::DenseTrajectory, t::Float64)
     idx, Δe = linear_interp(traj.t_vec, t)
     # This could be replaced with precise integration of accel and vel signals...
+    if traj.pos[idx] == traj.pos[idx+1]
+        return traj.pos[idx]
+    end
     s = interpolate(traj.pos[idx], traj.pos[idx+1], Δe)
     return s
 end
@@ -540,6 +567,7 @@ function verify(traj::Trajectory)
         end
         verify(p)
     end
+    verify_abstract_traj(traj)
 end
 function get_start_time(traj::Trajectory)
     if length(traj.segments) > 0
@@ -580,7 +608,8 @@ function get_active_segment_idx(traj::Trajectory,t::Float64)
     return idx
 end
 function get_active_segment(traj::Trajectory,t::Float64)
-    get_active_segment(traj.segments[get_active_segment_idx(traj,t)],t)
+    idx = get_active_segment_idx(traj,t)
+    get_active_segment(traj.segments[idx],t)
 end
 function get_time_from_arc_length(traj::Trajectory,s::Float64)
     idx,Δe = linear_interp(traj.s_vec,s)
@@ -592,6 +621,25 @@ get_position(traj::Trajectory,t::Float64) = get_position(get_active_segment(traj
 get_heading(traj::Trajectory,t::Float64) = get_heading(get_active_segment(traj,t),t)
 get_vel(traj::Trajectory,t::Float64) = get_vel(get_active_segment(traj,t),t)
 get_yaw_rate(traj::Trajectory,t::Float64) = get_yaw_rate(get_active_segment(traj,t),t)
+function cap_trajectory(traj::Trajectory)
+    start = WaitTrajectory(
+        get_start_pt(traj),
+        get_heading(traj,get_start_time(traj)),
+        TimeInterval(get_start_time(traj),get_start_time(traj))
+        )
+    finish = WaitTrajectory(
+        get_end_pt(traj),
+        get_heading(traj,get_end_time(traj)),
+        TimeInterval(get_end_time(traj),get_end_time(traj))
+        )
+    new_traj = Trajectory()
+    push!(new_traj,start)
+    for seg in traj.segments
+        push!(new_traj,seg)
+    end
+    push!(new_traj,finish)
+    new_traj
+end
 
 """
     `construct_trajectory`
@@ -742,6 +790,7 @@ function SimpleTrajectory(traj::T,N::Int) where{T <: AbstractTrajectory}
 end
 function verify(traj::SimpleTrajectory)
     @assert length(traj.t) == length(traj.s) == length(traj.pts) "lengths do not match"
+    verify_abstract_traj(traj)
 end
 get_start_time(traj::SimpleTrajectory)  = traj.t[1]
 get_end_time(traj::SimpleTrajectory)    = traj.t[end]
@@ -767,7 +816,6 @@ end
 function get_yaw_rate(traj::SimpleTrajectory,t::Float64)
     get_trajectory_point_by_time(traj,t).yaw_rate
 end
-
 
 """
     `optimize_velocity_profile(traj::Trajectory)`
@@ -877,7 +925,6 @@ function optimize_velocity_profile_traj_only(traj::Trajectory;
         m=m,n=n,a_max=a_max,verbose=verbose)
     return new_traj
 end
-
 
 """
     `stitch_trajectories(traj1::Trajectory,traj2::Trajectory;buffer=[0.0,0.0])`
