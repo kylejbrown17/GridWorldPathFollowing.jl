@@ -621,6 +621,10 @@ get_position(traj::Trajectory,t::Float64) = get_position(get_active_segment(traj
 get_heading(traj::Trajectory,t::Float64) = get_heading(get_active_segment(traj,t),t)
 get_vel(traj::Trajectory,t::Float64) = get_vel(get_active_segment(traj,t),t)
 get_yaw_rate(traj::Trajectory,t::Float64) = get_yaw_rate(get_active_segment(traj,t),t)
+
+"""
+    `cap_trajectory(traj::Trajectory)`
+"""
 function cap_trajectory(traj::Trajectory)
     start = WaitTrajectory(
         get_start_pt(traj),
@@ -642,14 +646,17 @@ function cap_trajectory(traj::Trajectory)
 end
 
 """
-    `construct_trajectory`
+    `construct_trajectory(path::GridWorldPath;cap=true)`
 
     Returns a Trajectory that matches the sequence of vertices visited by `path`
     Inputs:
-    - beginning robot state (`TrajectoryPoint`)
-    - instructions (`GridWorldPath`)
+    - path::GridWorldPath - contains information about the initial starting
+    position and time of the robot, as well as the series of transitions that
+    the robot must make.
+    - cap::Bool - when `true`, calls the `cap_trajectory` function on the traj
+    before returning it.
 """
-function construct_trajectory(path::GridWorldPath)
+function construct_trajectory(path::GridWorldPath;cap::Bool=true)
     N = length(path.waypoints)
     @assert (N > 0) "path is empty"
 
@@ -757,6 +764,9 @@ function construct_trajectory(path::GridWorldPath)
     seg = StraightTrajectory(pos,get_heading(traj,get_end_time(traj)),
         path.cellwidth/2,TimeInterval(t,ctr_t))
     push!(traj, seg)
+    if cap
+        return cap_trajectory(traj)
+    end
     return traj
 end
 
