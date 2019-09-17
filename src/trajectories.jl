@@ -42,11 +42,13 @@ export
     ArcTrajectory,
     WaitTrajectory,
     PivotTrajectory,
+    ReverseTrajectory,
 
     Trajectory,
     get_active_segment_idx,
     get_active_segment,
     cap_trajectory,
+    push_with_reverse_flag!,
     construct_trajectory,
     optimize_velocity_profile,
     optimize_velocity_profile_traj_only,
@@ -450,6 +452,25 @@ get_yaw_rate(traj::PivotTrajectory,t::Float64) = get_yaw_rate(ArcTrajectory(traj
 get_time_from_pt(traj::PivotTrajectory,pt::VecE2) = get_time_from_pt(ArcTrajectory(traj),pt)
 
 """
+    `ReverseTrajectory`
+
+    When the robot is supposed to be driving in reverse
+"""
+struct ReverseTrajectory{T} <: TrajectoryPrimitive
+    traj::T
+end
+get_start_pt(traj::R) where {R<:ReverseTrajectory}              = get_start_pt(traj.traj)
+get_end_pt(traj::R) where {R<:ReverseTrajectory}                = get_end_pt(traj.traj)
+verify(traj::R) where {R<:ReverseTrajectory}                    = verify(traj.traj)
+get_length(traj::R) where {R<:ReverseTrajectory}                = get_length(traj.traj)
+get_dist(traj::R, t::Float64) where {R<:ReverseTrajectory}      = get_dist(traj.traj, t)
+get_position(traj::R,t::Float64) where {R<:ReverseTrajectory}   = get_position(traj.traj)
+get_heading(traj::R,t::Float64) where {R<:ReverseTrajectory}    = -1.0 * get_heading(traj.traj,t)
+get_vel(traj::R, t::Float64) where {R<:ReverseTrajectory}       = -1.0 * get_vel(traj.traj,t)
+get_yaw_rate(traj::R,t::Float64) where {R<:ReverseTrajectory}   = get_yaw_rate(traj.traj,t)
+get_time_from_pt(traj::R, pt::VecE2) where {R<:ReverseTrajectory} = get_time_from_pt(traj.traj,pt)
+
+"""
     `DenseTrajectory`
 
     Contains an underlying `AbstractTrajectory` with extra information about the
@@ -551,6 +572,15 @@ function Base.push!(traj::Trajectory,seg::T) where {T <: AbstractTrajectory}
     push!(traj.t_vec, get_end_time(seg))
     push!(traj.s_vec, traj.s_vec[end] + get_length(seg))
     push!(traj.segments, seg)
+    traj
+end
+function push_with_reverse_flag!(traj::Trajectory,seg::T,flag::Bool=false) where {T <: AbstractTrajectory}
+    if flag
+        push!(traj,ReverseTrajectory(seg))
+    else
+        push!(traj,seg)
+    end
+    traj
 end
 function verify(traj::Trajectory)
     for (i,p) in enumerate(traj.segments)
@@ -667,6 +697,7 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
     h       = VecE2(NaN,NaN)
     t       = path.start_time
     ctr_t   = t
+    reverse_flag = false
 
     i = 1
     while i <= N
@@ -750,6 +781,7 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
             # reverse its coordinate frame
             seg = StraightTrajectory(pos,ctr_pos,TimeInterval(t,ctr_t))
             push!(traj, seg)
+            reverse_flag = !reverse_flag # switch flag
             seg = StraightTrajectory(ctr_pos,pos,TimeInterval(ctr_t,(ctr_t + w.t)/2))
             push!(traj, seg)
         end
@@ -870,6 +902,7 @@ function optimize_velocity_profile(traj::Trajectory;
     # #        = (Imat*a)'*t*tv
 
     N = length(traj.segments)
+    stop_idxs = map(seg->norm(get_vel(seg,get_start_time(seg))) == 0, traj.segments) # true if v == 0 along this trajectory
     d = [get_length(seg) for seg in traj.segments]
     cd = cumsum(d)
     t = [[get_start_time(seg) for seg in traj.segments]..., get_end_time(traj)]
@@ -892,6 +925,7 @@ function optimize_velocity_profile(traj::Trajectory;
         v[1][1] == v0,    # initial conditions
         v[end][end] == vT,  # final conditions
         [v[i] >= 0.0 for i in 1:N]...,
+        [v[i] == 0.0 for i in 1:N if stop_idxs[i] == true]...,
         [v[i][end] == v[i+1][1] for i in 1:N-1]...,
         [v[i][j+1] == v[i][j] + a[i][j]*(dt[i]/m) for i in 1:N for j in 1:m]...,# dynamics
         s[1][1] == s0,
