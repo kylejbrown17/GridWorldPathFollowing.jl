@@ -19,6 +19,9 @@ export
 
     AbstractTrajectory,
     TrajectoryPrimitive,
+    AbstractTrackingTrajectory,
+    AbstractStabilizingTrajectory,
+    AbstractPivotingTrajectory,
     CompositeTrajectory,
     EmptyPrimitive,
 
@@ -120,6 +123,9 @@ end
 
 abstract type AbstractTrajectory end
 abstract type TrajectoryPrimitive <: AbstractTrajectory end
+abstract type AbstractTrackingTrajectory <: TrajectoryPrimitive end
+abstract type AbstractStabilizingTrajectory <: TrajectoryPrimitive end
+abstract type AbstractPivotingTrajectory <: TrajectoryPrimitive end
 abstract type CompositeTrajectory <: AbstractTrajectory end
 struct EmptyPrimitive <: AbstractTrajectory end
 """
@@ -245,6 +251,10 @@ function get_vel end
     AbstractTrajectory
 """
 function get_yaw_rate end
+"""
+    `get_primitive`
+"""
+function get_primitive end
 function verify_abstract_traj(traj::T) where {T<:AbstractTrajectory}
     t_mid = (get_start_time(traj)+get_end_time(traj))/2.0
     @assert !isnan(get_yaw_rate(traj,t_mid)) "get_yaw_rate is NaN"
@@ -269,7 +279,7 @@ get_active_segment(traj::T,t::Float64) where {T <: AbstractTrajectory} = traj
 """
     `StraightTrajectory`
 """
-struct StraightTrajectory <: TrajectoryPrimitive
+struct StraightTrajectory <: AbstractTrackingTrajectory
     pt1::VecE2 # start point
     # pt2::VecE2 # end point
     heading::VecE2
@@ -328,7 +338,7 @@ end
 """
     `ArcTrajectory`
 """
-struct ArcTrajectory <: TrajectoryPrimitive
+struct ArcTrajectory <: AbstractTrackingTrajectory
     center::VecE2
     radius::Float64 #
     heading1::VecE2
@@ -407,7 +417,7 @@ end
 
     When the robot should not be moving
 """
-struct WaitTrajectory <: TrajectoryPrimitive
+struct WaitTrajectory <: AbstractStabilizingTrajectory
     pt1::VecE2 # start point
     heading::VecE2
     interval::TimeInterval
@@ -431,7 +441,7 @@ get_time_from_pt(traj::WaitTrajectory,pt::VecE2) = get_time_from_pt(StraightTraj
 
     When the robot simply turns in place.
 """
-struct PivotTrajectory <: TrajectoryPrimitive
+struct PivotTrajectory <: AbstractPivotingTrajectory
     pt1::VecE2
     heading1::VecE2
     Δθ::Float64
@@ -451,6 +461,13 @@ get_vel(traj::PivotTrajectory, t::Float64) = VecE2(0.0,0.0)
 get_yaw_rate(traj::PivotTrajectory,t::Float64) = get_yaw_rate(ArcTrajectory(traj),t)
 get_time_from_pt(traj::PivotTrajectory,pt::VecE2) = get_time_from_pt(ArcTrajectory(traj),pt)
 
+for T = (:StraightTrajectory, :ArcTrajectory, :WaitTrajectory, :PivotTrajectory)
+    @eval get_primitive(traj::$T) = traj
+end
+
+export
+    get_reversed_trajectory_point_by_time
+    
 """
     `ReverseTrajectory`
 
@@ -459,16 +476,26 @@ get_time_from_pt(traj::PivotTrajectory,pt::VecE2) = get_time_from_pt(ArcTrajecto
 struct ReverseTrajectory{T} <: TrajectoryPrimitive
     traj::T
 end
-get_start_pt(traj::R) where {R<:ReverseTrajectory}              = get_start_pt(traj.traj)
-get_end_pt(traj::R) where {R<:ReverseTrajectory}                = get_end_pt(traj.traj)
-verify(traj::R) where {R<:ReverseTrajectory}                    = verify(traj.traj)
-get_length(traj::R) where {R<:ReverseTrajectory}                = get_length(traj.traj)
-get_dist(traj::R, t::Float64) where {R<:ReverseTrajectory}      = get_dist(traj.traj, t)
-get_position(traj::R,t::Float64) where {R<:ReverseTrajectory}   = get_position(traj.traj)
-get_heading(traj::R,t::Float64) where {R<:ReverseTrajectory}    = -1.0 * get_heading(traj.traj,t)
-get_vel(traj::R, t::Float64) where {R<:ReverseTrajectory}       = -1.0 * get_vel(traj.traj,t)
-get_yaw_rate(traj::R,t::Float64) where {R<:ReverseTrajectory}   = get_yaw_rate(traj.traj,t)
-get_time_from_pt(traj::R, pt::VecE2) where {R<:ReverseTrajectory} = get_time_from_pt(traj.traj,pt)
+for op = (:get_start_time, :get_end_time, :get_start_pt, :get_end_pt, :verify, :get_length)
+    @eval $op(traj::R) where {R<:ReverseTrajectory} = $op(traj.traj)
+end
+get_dist(traj::R,t::Float64) where {R<:ReverseTrajectory}      = get_dist(traj.traj, t)
+get_position(traj::R,t::Float64) where {R<:ReverseTrajectory}   = get_position(traj.traj, t)
+get_heading(traj::R,t::Float64) where {R<:ReverseTrajectory}    = get_heading(traj.traj, t)
+get_vel(traj::R,t::Float64) where {R<:ReverseTrajectory}       = get_vel(traj.traj, t)
+get_yaw_rate(traj::R,t::Float64) where {R<:ReverseTrajectory}   = get_yaw_rate(traj.traj, t)
+get_time_from_pt(traj::R, pt::VecE2) where {R<:ReverseTrajectory} = get_time_from_pt(traj.traj, pt)
+get_primitive(traj::R) where {R<:ReverseTrajectory} = get_primitive(traj.traj)
+function get_reversed_trajectory_point_by_time(traj::R,t::Float64) where {R<:ReverseTrajectory}
+    ref = get_trajectory_point_by_time(traj,t)
+    TrajectoryPoint(
+        pos     = -1.0*ref.pos,
+        heading = -1.0*ref.heading,
+        vel     = -1.0*ref.vel,
+        yaw_rate= -1.0*ref.yaw_rate,
+        t       = ref.t
+    )
+end
 
 """
     `DenseTrajectory`
@@ -483,10 +510,9 @@ struct DenseTrajectory{T<:AbstractTrajectory} <: CompositeTrajectory
     vel::Vector{Float64}
     pos::Vector{Float64}
 end
-get_start_time(traj::DenseTrajectory)   = get_start_time(traj.traj)
-get_end_time(traj::DenseTrajectory)     = get_end_time(traj.traj)
-get_start_pt(traj::DenseTrajectory)     = get_start_pt(traj.traj)
-get_end_pt(traj::DenseTrajectory)       = get_end_pt(traj.traj)
+for op = (:get_start_time, :get_end_time, :get_start_pt, :get_end_pt, :get_length)
+    @eval $op(traj::R) where {R<:DenseTrajectory} = $op(traj.traj)
+end
 function verify(traj::DenseTrajectory)
     verify(traj.traj)
     @assert isapprox(traj.t_vec[1], get_start_time(traj.traj);atol=1e-10) "start times do not match"
@@ -496,7 +522,6 @@ function verify(traj::DenseTrajectory)
     @assert length(traj.accel) == max(0,length(traj.t_vec)-1) "vel and pos have different lengths"
     verify_abstract_traj(traj)
 end
-get_length(traj::DenseTrajectory) = get_length(traj.traj)
 function get_dist(traj::DenseTrajectory, t::Float64)
     idx, Δe = linear_interp(traj.t_vec, t)
     # This could be replaced with precise integration of accel and vel signals...
@@ -548,6 +573,7 @@ function get_yaw_rate(traj::DenseTrajectory,t::Float64)
         return yw_nominal
     end
 end
+get_primitive(traj::R) where {R<:DenseTrajectory} = get_primitive(traj.traj)
 
 """
     `Trajectory`
@@ -599,34 +625,6 @@ function verify(traj::Trajectory)
     end
     verify_abstract_traj(traj)
 end
-function get_start_time(traj::Trajectory)
-    if length(traj.segments) > 0
-        return get_start_time(traj.segments[1])
-    else
-        return NaN
-    end
-end
-function get_end_time(traj::Trajectory)
-    if length(traj.segments) > 0
-        return get_end_time(traj.segments[end])
-    else
-        return NaN
-    end
-end
-function get_start_pt(traj::Trajectory)
-    if length(traj.segments) > 0
-        return get_start_pt(traj.segments[1])
-    else
-        return NaN
-    end
-end
-function get_end_pt(traj::Trajectory)
-    if length(traj.segments) > 0
-        return get_end_pt(traj.segments[end])
-    else
-        return NaN
-    end
-end
 get_length(traj::Trajectory) = sum([get_length(seg) for seg in traj.segments])
 """
     `get_active_segment_idx`
@@ -646,11 +644,31 @@ function get_time_from_arc_length(traj::Trajectory,s::Float64)
     seg = traj.segments[idx]
     get_time_from_arc_length(seg, s-traj.s_vec[idx])
 end
-get_dist(traj::Trajectory,t::Float64) = get_dist(get_active_segment(traj,t),t)
-get_position(traj::Trajectory,t::Float64) = get_position(get_active_segment(traj,t),t)
-get_heading(traj::Trajectory,t::Float64) = get_heading(get_active_segment(traj,t),t)
-get_vel(traj::Trajectory,t::Float64) = get_vel(get_active_segment(traj,t),t)
-get_yaw_rate(traj::Trajectory,t::Float64) = get_yaw_rate(get_active_segment(traj,t),t)
+for op = (:get_dist, :get_position, :get_heading, :get_vel, :get_yaw_rate)
+    @eval $op(traj::T,t::Float64) where {T<:Trajectory} = $op(get_active_segment(traj,t),t)
+end
+for op = (:get_start_time, :get_start_pt)
+    @eval begin
+        function $op(traj::T) where {T<:Trajectory}
+            if length(traj.segments) > 0
+                return $op(traj.segments[1])
+            else
+                return NaN
+            end
+        end
+    end
+end
+for op = (:get_end_time, :get_end_pt)
+    @eval begin
+        function $op(traj::T) where {T<:Trajectory}
+            if length(traj.segments) > 0
+                return $op(traj.segments[end])
+            else
+                return NaN
+            end
+        end
+    end
+end
 
 """
     `cap_trajectory(traj::Trajectory)`
@@ -718,7 +736,7 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
             ctr_t   = w.t
             # straight to boundary between cells
             seg = StraightTrajectory(pos,get_heading_vector(a),path.cellwidth/2,TimeInterval(t,(t+ctr_t)/2))
-            push!(traj, seg)
+            push_with_reverse_flag!(traj, seg, reverse_flag)
         elseif a == WAIT
             ctr_pos_0 = ctr_pos
             ctr_t_0 = ctr_t
@@ -733,25 +751,25 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
                         Δθ = get_angular_offset(atan(h),atan(h_next))
                         # halfway t->ctr_t_0
                         seg = ArcTrajectory(center,get_end_pt(traj),get_heading(traj,get_end_time(traj)),Δθ/2,TimeInterval(t,ctr_t_0))
-                        push!(traj, seg)
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
                         # wait ctr_t_0 -> ctr_t
                         # seg = ArcTrajectory(center,get_end_pt(traj),get_heading(traj,get_end_time(traj)),0.0,TimeInterval(ctr_t_0,ctr_t))
                         seg = WaitTrajectory(get_end_pt(traj),get_heading(traj,get_end_time(traj)),TimeInterval(ctr_t_0,ctr_t))
-                        push!(traj, seg)
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
                         # halfway again ctr_t -> (ctr_t+w.t)/2
                         seg = ArcTrajectory(center,get_end_pt(traj),get_heading(traj,get_end_time(traj)),Δθ/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
-                        push!(traj, seg)
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
                     else
                         # straight to center of cell
                         seg = StraightTrajectory(pos,h_next,path.cellwidth/2,TimeInterval(t,ctr_t_0))
-                        push!(traj, seg)
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
                         # wait
                         # seg = StraightTrajectory(ctr_pos_0,h_next,0.0,TimeInterval(ctr_t_0,ctr_t))
                         seg = WaitTrajectory(get_end_pt(traj),get_heading(traj,get_end_time(traj)),TimeInterval(ctr_t_0,ctr_t))
-                        push!(traj, seg)
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
                         # straight on
                         seg = StraightTrajectory(ctr_pos,h_next,path.cellwidth/2,TimeInterval(ctr_t,(ctr_t+w.t)/2))
-                        push!(traj, seg)
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
                     end
                     break
                 else
@@ -763,27 +781,29 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
         elseif dot(h,h_next) == 1 # abs(Δθ) == 0
             # straight to next boundary
             seg = StraightTrajectory(pos,h,path.cellwidth/2,TimeInterval(t,ctr_t))
-            push!(traj, seg)
+            push_with_reverse_flag!(traj, seg, reverse_flag)
             seg = StraightTrajectory(ctr_pos,h_next,path.cellwidth/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
-            push!(traj, seg)
+            push_with_reverse_flag!(traj, seg, reverse_flag)
         elseif dot(h,h_next) == 0 # abs(Δθ) == π/2
             # Turn to next boundary
             radius = path.cellwidth / 2
             center = pos + radius * h_next
             Δθ = get_angular_offset(atan(h),atan(h_next))
             seg = ArcTrajectory(center,pos,get_heading(traj,get_end_time(traj)),Δθ/2,TimeInterval(t,ctr_t))
-            push!(traj, seg)
+            push_with_reverse_flag!(traj, seg, reverse_flag)
             seg = ArcTrajectory(center,pos,get_heading(traj,get_end_time(traj)),Δθ/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
-            push!(traj, seg)
+            push_with_reverse_flag!(traj, seg, reverse_flag)
         elseif dot(h,h_next) == -1 # abs(Δθ) == π
             # reverse: straight to interior point, then backward to boundary
             # TODO this is still a problem!!! Need a flag telling the robot to
             # reverse its coordinate frame
             seg = StraightTrajectory(pos,ctr_pos,TimeInterval(t,ctr_t))
-            push!(traj, seg)
-            reverse_flag = !reverse_flag # switch flag
+            push_with_reverse_flag!(traj, seg, reverse_flag)
+            seg = WaitTrajectory(ctr_pos,h_next,TimeInterval(ctr_t,ctr_t))
+            push_with_reverse_flag!(traj, seg, reverse_flag)
+            @show reverse_flag = !reverse_flag # switch flag
             seg = StraightTrajectory(ctr_pos,pos,TimeInterval(ctr_t,(ctr_t + w.t)/2))
-            push!(traj, seg)
+            push_with_reverse_flag!(traj, seg, reverse_flag)
         end
         pos = get_end_pt(traj)
         h   = get_heading_vector(a)
@@ -795,7 +815,7 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
     # final half piece
     seg = StraightTrajectory(pos,get_heading(traj,get_end_time(traj)),
         path.cellwidth/2,TimeInterval(t,ctr_t))
-    push!(traj, seg)
+    push_with_reverse_flag!(traj, seg, reverse_flag)
     if cap
         return cap_trajectory(traj)
     end

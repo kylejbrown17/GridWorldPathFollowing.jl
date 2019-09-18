@@ -420,7 +420,7 @@ end
 let
     # start_pt = VecE2(0.0,0.0)
     # start_time = 0.0
-    # action_sequence = [SOUTH,EAST,WAIT,NORTH,EAST,EAST,EAST,SOUTH,SOUTH,WEST,NORTH,WEST,SOUTH,WEST,WEST]
+    # action_sequence = [SOUTH,EAST,WAIT,NORTH,EAST,WEST,WEST,SOUTH,SOUTH,WEST,NORTH,WEST,SOUTH,WEST,WEST]
     # # action_sequence = [EAST,NORTH,EAST]
     # cell_width = 1.0
     # transition_time = 2.0
