@@ -60,10 +60,10 @@ abstract type AbstractRobotModel end
     track_width ::Float64 = 0.1054
     wheel_radius::Float64 = 0.021
 end
-const UnicycleState = Vector{Float64}
-const UnicycleAction = Vector{Float64}
+const UnicycleState = Vector{R} where {R<:Real}
+const UnicycleAction = Vector{R} where {R<:Real}
 function get_state(model::UnicycleModel,pt::TrajectoryPoint)
-    state = [pt.pos.x, pt.pos.y, atan(pt.heading)]
+    state = Vector{Float64}([pt.pos.x, pt.pos.y, atan(pt.heading)])
 end
 function get_state(model::UnicycleModel,traj::T,t::Float64) where {T<:AbstractTrajectory}
     ref = get_trajectory_point_by_time(traj,t)
@@ -113,6 +113,8 @@ abstract type Controller end
     ϵ   ::Float64 = 0.1
     k1  ::Float64 = 4.0
     b   ::Float64 = 4.0
+    # helper
+    eps ::Float64 = 10e-9
 end
 
 ################################################################################
@@ -173,8 +175,13 @@ function construct_unicycle_controller(model::UnicycleModel,path::GridWorldPath,
     UnicycleController(model,traj,controller)
 end
 function get_action(controller::C,state::UnicycleState,t::Float64) where {C <: UnicycleController}
-    cmd = get_action(controller.controller,controller.traj,state,t)
-    w_cmd = convert_to_wheel_velocities(controller.model,cmd)
+    try
+        cmd = get_action(controller.controller,controller.traj,state,t)
+        w_cmd = convert_to_wheel_velocities(controller.model,cmd)
+    catch e
+        println(e)
+        rethrow()
+    end
 end
 
 """
@@ -197,6 +204,7 @@ function get_action(controller::TrackingController,target::UnicycleState,ff::Uni
     ϵ = controller.ϵ   # 0 < ϵ < 1/(1+γ)
     k1 = controller.k1 # k1 > 0
     b = controller.b   # b > 0
+    eps = controller.eps
     # state (global frame)
     x,y,θ = state[1],state[2],state[3]
     # reference (global frame)
@@ -225,13 +233,16 @@ function get_action(controller::TrackingController,target::UnicycleState,ff::Uni
     α = 1 - ϵ*h*x2 / (1 + V1^(1/2))
     β = ϵ*(
         (h_dot*x1+h*wr*x2+h*vr*sin(x0))/(1 + V1^(1/2))
-        - (h*x1/( ((1 + V1^(1/2))^2)*V1^(1/2) ))
+        - (h*x1/( ((1 + V1^(1/2))^2)*V1^(1/2) +  eps))
         * (x1*vr*sin(x0) - sat(k0*x2,a)*x2)
     )
     u0 = -β/α - sat(k1*x0_,b)
     # transform back
     w = -u0 + wr
     v = u1 + vr*cos(x0)
+    if isnan(w) || isnan(v)
+        println("NaN command encountered",controller, target, ff, state, t, w, v)
+    end
     return [w, v]
 end
 """
@@ -246,7 +257,7 @@ end
     * `ff`     - the current feedforward command [vr, wr] of the tracked trajectory
     * `state`  - the current state [x, y, θ] of the robot
 """
-function get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)
+function get_action(controller::PivotController,target::UnicycleState,ff::UnicycleAction,state::UnicycleState,t::Float64)
     # println("get_action(controller::PivotController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
     kw = controller.kw
     kp = controller.kp
@@ -260,6 +271,9 @@ function get_action(controller::PivotController,target::Vector{Float64},ff::Vect
     dθ = get_angular_offset(θ,θr) # heading error
     w = wr + kw*dθ
     v = vr + kp*dp
+    if isnan(w) || isnan(v)
+        println("NaN command encountered",controller, target, ff, state, t, w, v)
+    end
     return [w, v]
 end
 """
@@ -272,7 +286,7 @@ end
     * `ff`     - the current feedforward command [vr, wr] of the tracked trajectory
     * `state`  - the current state [x, y, θ] of the robot
 """
-function get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)
+function get_action(controller::StabilizeController,target::UnicycleState,ff::UnicycleAction,state::UnicycleState,t::Float64)
     # println("get_action(controller::StabilizeController,target::Vector{Float64},ff::Vector{Float64},state::Vector{Float64},t::Float64)")
     kw = controller.kw
     kp = controller.kp
@@ -291,9 +305,11 @@ function get_action(controller::StabilizeController,target::Vector{Float64},ff::
     dϕ = ([cos(θ),sin(θ),0] × [cos(ϕ),sin(ϕ),0])[end] # angular displacement from target position
     w = wr + kϕ*dϕ*dp + kw*dθ
     v = vr + kp*dp
+    if isnan(w) || isnan(v)
+        println("NaN command encountered",controller, target, ff, state, t, w, v)
+    end
     return [w, v]
 end
-
 
 function get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<:Controller}
     # println("get_action(controller::C,ref::TrajectoryPoint,state::UnicycleState,t::Float64) where {C<: Controller}")

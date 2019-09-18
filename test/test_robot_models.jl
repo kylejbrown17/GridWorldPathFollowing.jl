@@ -19,6 +19,25 @@ let
     dt = 0.1
     simulate(model,controller,traj,state,0.0,2.0,dt)
 end
+# Test for singulatiries
+let
+    state = [0.0,0.0,0.0]
+    target = state
+    ff = [0.0,0.0]
+    t = 0.0
+    let
+        controller = TrackingController()
+        @test !any(isnan, get_action(controller,target,ff,state,t))
+    end
+    let
+        controller = StabilizeController()
+        @test !any(isnan, get_action(controller,target,ff,state,t))
+    end
+    let
+        controller = PivotController()
+        @test !any(isnan, get_action(controller,target,ff,state,t))
+    end
+end
 let
     t1 = 0.0
     t2 = 1.0
