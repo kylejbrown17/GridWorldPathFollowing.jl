@@ -467,7 +467,7 @@ end
 
 export
     get_reversed_trajectory_point_by_time
-    
+
 """
     `ReverseTrajectory`
 
@@ -801,7 +801,8 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
             push_with_reverse_flag!(traj, seg, reverse_flag)
             seg = WaitTrajectory(ctr_pos,h_next,TimeInterval(ctr_t,ctr_t))
             push_with_reverse_flag!(traj, seg, reverse_flag)
-            @show reverse_flag = !reverse_flag # switch flag
+            # switch flag
+            reverse_flag = !reverse_flag
             seg = StraightTrajectory(ctr_pos,pos,TimeInterval(ctr_t,(ctr_t + w.t)/2))
             push_with_reverse_flag!(traj, seg, reverse_flag)
         end
@@ -957,8 +958,9 @@ function optimize_velocity_profile(traj::Trajectory;
 
     problem = minimize(sum([sumsquares(a[i]) for i in 1:N]),constraints);
     solve!(problem, ECOSSolver(verbose=verbose))
+    # solve!(problem, SCSSolver(verbose=verbose))
 
-    @assert problem.status == :Optimal "Optimization failed: problem.status != :Optimal"
+    @assert !(problem.status in Set([:Infeasible,:Error,:Unbounded,:Indeterminate])) string("Optimization failed: problem.status == ",problem.status)
 
     new_traj = Trajectory()
     s0 = 0.0

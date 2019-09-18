@@ -141,13 +141,6 @@ end
     kϕ::Float64 = 15.0
 end
 
-# """
-#     `BiDirectionalController`
-# """
-# struct BiDirectionalController{C<:Controller} <: Controller
-#     controller::C
-# end
-
 ################################################################################
 ############################# SwitchingController ##############################
 ################################################################################
@@ -162,29 +155,6 @@ end
     pivoter     ::P       = PivotController()
     stabilizer  ::S   = StabilizeController()
 end
-# BiDirectionalSwitchingController(controller::C) where {C<:SwitchingController} = SwitchingController(
-#         tracker     = BiDirectionalController(controller.tracker),
-#         pivoter     = BiDirectionalController(controller.pivoter),
-#         stabilizer  = BiDirectionalController(controller.stabilizer)
-#     )
-# BiDirectionalSwitchingController() = SwitchingController(
-#     tracker     = BiDirectionalController(TrackingController()),
-#     pivoter     = BiDirectionalController(PivotController()),
-#     stabilizer  = BiDirectionalController(StabilizeController())
-# )
-
-
-# """
-#     `BiDirectionalSwitchingController`
-#
-#     A composite controller that switches between operating modes based on the
-#     active trajectory type.
-# """
-# @with_kw struct BiDirectionalSwitchingController <: Controller
-#     tracker     ::BiDirectionalController{TrackingController}    = BiDirectionalController(TrackingController())
-#     pivoter     ::BiDirectionalController{PivotController}       = BiDirectionalController(PivotController())
-#     stabilizer  ::BiDirectionalController{StabilizeController}   = BiDirectionalController(StabilizeController())
-# end
 
 """
     `UnicycleController`

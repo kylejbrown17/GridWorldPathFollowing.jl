@@ -457,32 +457,68 @@ let
 end
 # Speed Profile Optimization
 let
-    # start_pt = VecE2(0.0,0.0)
-    # start_time = 0.0
-    # action_sequence = [SOUTH,EAST,WAIT,NORTH,EAST,WEST,WEST,SOUTH,SOUTH,WEST,NORTH,WEST,SOUTH,WEST,WEST]
-    # # action_sequence = [EAST,NORTH,EAST]
-    # cell_width = 1.0
-    # transition_time = 2.0
-    # grid_path = construct_grid_world_path(start_pt,start_time,
-    #     action_sequence,cell_width,transition_time)
-    #
-    # traj = construct_trajectory(grid_path)
-    # verify(traj)
-    #
-    # # t_vec, accel, vel, pos = optimize_velocity_profile(traj)
-    # # dense_traj = DenseTrajectory(traj,t_vec,accel,vel,pos)
-    # dense_traj, t_vec, accel, vel, pos = optimize_velocity_profile(traj)
-    #
-    # verify(dense_traj)
-    # t = 0.5
-    # get_length(dense_traj)
-    # get_dist(dense_traj,t)
-    # get_position(dense_traj,t)
-    # get_heading(dense_traj,t)
-    # get_vel(dense_traj,t)
-    # get_yaw_rate(dense_traj,t)
-    #
-    # get_trajectory_point_by_time(dense_traj,t)
+    start_pt = VecE2(0.0,0.0)
+    start_time = 0.0
+    action_sequence = [SOUTH,EAST,WAIT,NORTH,EAST,WEST,WEST,SOUTH,SOUTH,WEST,NORTH,WEST,SOUTH,WEST,WEST]
+    # action_sequence = [EAST,NORTH,EAST]
+    cell_width = 1.0
+    transition_time = 2.0
+    grid_path = construct_grid_world_path(start_pt,start_time,
+        action_sequence,cell_width,transition_time)
+
+    traj = construct_trajectory(grid_path)
+    verify(traj)
+
+    # t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+    # dense_traj = DenseTrajectory(traj,t_vec,accel,vel,pos)
+    dense_traj, t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+
+    verify(dense_traj)
+    t = 0.5
+    get_length(dense_traj)
+    get_dist(dense_traj,t)
+    get_position(dense_traj,t)
+    get_heading(dense_traj,t)
+    get_vel(dense_traj,t)
+    get_yaw_rate(dense_traj,t)
+
+    get_trajectory_point_by_time(dense_traj,t)
+end
+let
+    start_pt = VecE2(0.0,0.0)
+    start_time = 0.0
+    action_sequence = [WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,NORTH,
+        NORTH,NORTH,NORTH,NORTH,NORTH,NORTH,EAST,EAST,EAST,EAST,EAST,EAST,EAST,
+        EAST,EAST,EAST,EAST,EAST,EAST,EAST,EAST,EAST,EAST,EAST,NORTH,NORTH,
+        NORTH,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,WEST,
+        WEST,WEST,WEST,WEST,WEST,SOUTH,SOUTH,SOUTH,SOUTH,SOUTH,SOUTH,SOUTH,
+        SOUTH,SOUTH,WEST,WAIT,WAIT,WAIT,SOUTH,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,
+        WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,WAIT,
+        WAIT,]
+    # action_sequence = [EAST,NORTH,EAST]
+    cell_width = 0.5
+    transition_time = 2.0
+    grid_path = construct_grid_world_path(start_pt,start_time,
+        action_sequence,cell_width,transition_time)
+
+    traj = construct_trajectory(grid_path)
+    verify(traj)
+
+    # t_vec, accel, vel, pos = optimize_velocity_profile(traj)
+    # dense_traj = DenseTrajectory(traj,t_vec,accel,vel,pos)
+    dense_traj, t_vec, accel, vel, pos = optimize_velocity_profile(traj;verbose=false)
+    @show minimum(accel), maximum(accel)
+
+    verify(dense_traj)
+    t = 0.5
+    get_length(dense_traj)
+    get_dist(dense_traj,t)
+    get_position(dense_traj,t)
+    get_heading(dense_traj,t)
+    get_vel(dense_traj,t)
+    get_yaw_rate(dense_traj,t)
+
+    get_trajectory_point_by_time(dense_traj,t)
 end
 let
     t1 = 0.0
