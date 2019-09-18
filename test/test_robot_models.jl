@@ -69,3 +69,25 @@ let
     dt = 0.1
     simulate(model,controller,traj,state,0.01,2.0,dt)
 end
+# Test Driving in reverse mode
+let
+    t1 = 0.0
+    t2 = 1.0
+    t = (t1+t2)/2.0
+    p1 = VecE2(1.0,0.0)
+    p2 = VecE2(0.0,1.0)
+    heading = (p2-p1)/norm(p2-p1)
+    arclength = norm(p2-p1)
+
+    traj = StraightTrajectory(p1,heading,arclength,TimeInterval(t1,t2))
+    reversed_traj = ReverseTrajectory(traj)
+
+    controller = SwitchingController()
+
+    state1 = [0.1, 0.5, 0.1]
+    state2 = [0.1, 0.5, pi+0.1]
+    a1 = get_action(controller,traj,state1,t)
+    a2 = get_action(controller,reversed_traj,state2,t)
+    @test isapprox(a1[1], a2[1])
+    @test isapprox(a1[2],-a2[2])
+end

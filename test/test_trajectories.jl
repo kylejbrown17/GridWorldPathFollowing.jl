@@ -251,6 +251,45 @@ let
     @test array_isapprox(traj_pt2.vel, velocity)
     @test traj_pt2.yaw_rate == yaw_rate
 end
+# Reverse Trajectory
+let
+    t1 = 0.0
+    t2 = 1.0
+    interval = TimeInterval(t1,t2)
+    t = 0.5
+    dt = get_Δt(interval,t)
+    p1 = VecE2(0.0,0.0)
+    p2 = VecE2(0.0,1.0)
+    heading = (p2-p1)/norm(p2-p1)
+    arclength = norm(p2-p1)
+    traj = StraightTrajectory(p1,heading,arclength,TimeInterval(t1,t2))
+
+    reversed_traj = ReverseTrajectory(traj)
+    # @test get_heading(reversed_traj,t)  == -1.0 * get_heading(traj,t)
+    # @test get_vel(reversed_traj,t)      == -1.0 * get_vel(traj,t)
+    @test get_position(reversed_traj,t) == get_position(reversed_traj,t)
+    @test get_yaw_rate(reversed_traj,t) == get_yaw_rate(reversed_traj,t)
+
+    pt = get_trajectory_point_by_time(traj,t)
+    reversed_pt = get_trajectory_point_by_time(reversed_traj,t)
+    # @test reversed_pt.heading   == -1.0 * pt.heading
+    # @test reversed_pt.vel       == -1.0 * pt.vel
+    @test reversed_pt.pos       == pt.pos
+    @test reversed_pt.yaw_rate  == pt.yaw_rate
+
+    dense_traj = DenseTrajectory(
+        reversed_traj,
+        [t1,t2],
+        [0.0],
+        (arclength / (t2-t1))*[1.0, 1.0],
+        [0.0, arclength]
+    )
+    @test get_heading(reversed_traj,t)  == get_heading(dense_traj,t)
+    @test get_vel(reversed_traj,t)      == get_vel(dense_traj,t)
+    @test get_position(reversed_traj,t) == get_position(dense_traj,t)
+    @test get_yaw_rate(reversed_traj,t) == get_yaw_rate(dense_traj,t)
+
+end
 # Trajectory
 let
     t1 = 0.0

@@ -141,12 +141,12 @@ end
     kϕ::Float64 = 15.0
 end
 
-"""
-    `BiDirectionalController`
-"""
-struct BiDirectionalController{C<:Controller} <: Controller
-    controller::C
-end
+# """
+#     `BiDirectionalController`
+# """
+# struct BiDirectionalController{C<:Controller} <: Controller
+#     controller::C
+# end
 
 ################################################################################
 ############################# SwitchingController ##############################
@@ -162,16 +162,16 @@ end
     pivoter     ::P       = PivotController()
     stabilizer  ::S   = StabilizeController()
 end
-BiDirectionalSwitchingController(controller::C) where {C<:SwitchingController} = SwitchingController(
-        tracker     = BiDirectionalController(controller.tracker),
-        pivoter     = BiDirectionalController(controller.pivoter),
-        stabilizer  = BiDirectionalController(controller.stabilizer)
-    )
-BiDirectionalSwitchingController() = SwitchingController(
-    tracker     = BiDirectionalController(TrackingController()),
-    pivoter     = BiDirectionalController(PivotController()),
-    stabilizer  = BiDirectionalController(StabilizeController())
-)
+# BiDirectionalSwitchingController(controller::C) where {C<:SwitchingController} = SwitchingController(
+#         tracker     = BiDirectionalController(controller.tracker),
+#         pivoter     = BiDirectionalController(controller.pivoter),
+#         stabilizer  = BiDirectionalController(controller.stabilizer)
+#     )
+# BiDirectionalSwitchingController() = SwitchingController(
+#     tracker     = BiDirectionalController(TrackingController()),
+#     pivoter     = BiDirectionalController(PivotController()),
+#     stabilizer  = BiDirectionalController(StabilizeController())
+# )
 
 
 # """
@@ -336,25 +336,28 @@ function get_action(controller::C,traj::T,state::UnicycleState,t::Float64) where
     ref = get_trajectory_point_by_time(traj,t)
     get_action(controller,ref,state,t)
 end
-function get_action(controller::C,traj::T,state::UnicycleState,t::Float64) where {C<:BiDirectionalController,T<:ReverseTrajectory}
-    ref = get_reversed_trajectory_point_by_time(traj,t)
-    get_action(controller,ref,-1.0*state,t)
+const RevTraj = Union{TT,DenseTrajectory{TT}} where {TT<:ReverseTrajectory}
+function get_action(controller::C,traj::T,state::UnicycleState,t::Float64) where {C<:Controller,T<:RevTraj}
+    ref = get_trajectory_point_by_time(traj,t)
+    reversed_state = [state[1], state[2], pi+state[3]]
+    action = get_action(controller,ref,reversed_state,t)
+    return [action[1], -1.0*action[2]]
 end
 
 function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:Trajectory}
     # println("get_action(controller::SwitchingController,traj::Trajectory,state::UnicycleState,t::Float64)")
     get_action(controller,get_active_segment(traj,t),state,t)
 end
-const TrackingTraj = Union{TT,DenseTrajectory{TT},ReverseTrajectory{TT}} where {TT<:AbstractTrackingTrajectory}
+const TrackingTraj = Union{TT,DenseTrajectory{TT},ReverseTrajectory{TT},DenseTrajectory{ReverseTrajectory{TT}}} where {TT<:AbstractTrackingTrajectory}
 function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:TrackingTraj}
     # println("get_action(controller::SwitchingController,traj::DenseTrajectory,state::UnicycleState,t::Float64)")
     get_action(controller.tracker,traj,state,t)
 end
-const WaitTraj = Union{TT,DenseTrajectory{TT},ReverseTrajectory{TT}} where {TT<:AbstractStabilizingTrajectory}
+const WaitTraj = Union{TT,DenseTrajectory{TT},ReverseTrajectory{TT},DenseTrajectory{ReverseTrajectory{TT}}} where {TT<:AbstractStabilizingTrajectory}
 function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:WaitTraj}
     get_action(controller.stabilizer,traj,state,t)
 end
-const PivotTraj = Union{TT,DenseTrajectory{TT},ReverseTrajectory{TT}} where {TT<:AbstractPivotingTrajectory}
+const PivotTraj = Union{TT,DenseTrajectory{TT},ReverseTrajectory{TT},DenseTrajectory{ReverseTrajectory{TT}}} where {TT<:AbstractPivotingTrajectory}
 function get_action(controller::SwitchingController,traj::T,state::UnicycleState,t::Float64) where {T<:PivotTraj}
     get_action(controller.pivoter,traj,state,t)
 end

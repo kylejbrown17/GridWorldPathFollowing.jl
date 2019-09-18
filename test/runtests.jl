@@ -62,7 +62,7 @@ end
     @time @testset "GridWorldPathFollowing.RobotModels" begin
         include(joinpath(testdir, "test_robot_models.jl"))
     end
-    @time @testset "GridWorldPathFollowing.Deploy" begin
-        include(joinpath(testdir, "test_deploy.jl"))
-    end
+    # @time @testset "GridWorldPathFollowing.Deploy" begin
+    #     include(joinpath(testdir, "test_deploy.jl"))
+    # end
 end

@@ -489,10 +489,10 @@ get_primitive(traj::R) where {R<:ReverseTrajectory} = get_primitive(traj.traj)
 function get_reversed_trajectory_point_by_time(traj::R,t::Float64) where {R<:ReverseTrajectory}
     ref = get_trajectory_point_by_time(traj,t)
     TrajectoryPoint(
-        pos     = -1.0*ref.pos,
-        heading = -1.0*ref.heading,
-        vel     = -1.0*ref.vel,
-        yaw_rate= -1.0*ref.yaw_rate,
+        pos     = ref.pos,
+        heading = ref.heading,
+        vel     = ref.vel,
+        yaw_rate= ref.yaw_rate,
         t       = ref.t
     )
 end
