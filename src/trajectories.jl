@@ -778,6 +778,19 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
                 else
                     ctr_pos = w.pt
                     ctr_t = w.t
+                    # Handle the case where the robot is just waiting until the end
+                    if i == N
+                        # straight to center of cell
+                        seg = StraightTrajectory(pos,h,path.cellwidth/2,TimeInterval(t,ctr_t_0))
+                        push_with_reverse_flag!(traj, seg, reverse_flag)
+                        # wait
+                        # seg = WaitTrajectory(get_end_pt(traj),get_heading(traj,get_end_time(traj)),TimeInterval(ctr_t_0,ctr_t))
+                        # push_with_reverse_flag!(traj, seg, reverse_flag)
+                        if cap
+                            return cap_trajectory(traj)
+                        end
+                        return traj
+                    end
                     i += 1
                 end
             end
