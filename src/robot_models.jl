@@ -2,6 +2,7 @@ module RobotModels
 
 using Parameters
 using Vec, LinearAlgebra
+using GraphUtils
 
 using ..Utils
 using ..Trajectories
@@ -206,9 +207,9 @@ function get_action(controller::TrackingController,target::UnicycleState,ff::Uni
     b = controller.b   # b > 0
     eps = controller.eps
     # state (global frame)
-    x,y,θ = state[1],state[2],state[3]
+    x,y,θ = state[1],state[2],wrap_to_pi(state[3])
     # reference (global frame)
-    xr,yr,θr = target[1],target[2],target[3]
+    xr,yr,θr = target[1],target[2],wrap_to_pi(target[3])
     wr,vr = ff[1],ff[2]
     # errors in robot frame
     e = [ cos(θ) sin(θ) 0;
