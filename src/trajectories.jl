@@ -745,7 +745,7 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
                 a = w.transition
                 h_next = get_heading_vector(a)
                 if a != WAIT
-                    if abs(dot(h,h_next) != 1) # abs(Δθ) > 0
+                    if abs(dot(h,h_next)) != 1 # abs(Δθ) > 0
                         radius = path.cellwidth / 2
                         center = pos + radius * h_next
                         Δθ = get_angular_offset(atan(h),atan(h_next))
@@ -759,15 +759,18 @@ function construct_trajectory(path::GridWorldPath;cap::Bool=true)
                         # halfway again ctr_t -> (ctr_t+w.t)/2
                         seg = ArcTrajectory(center,get_end_pt(traj),get_heading(traj,get_end_time(traj)),Δθ/2,TimeInterval(ctr_t,(ctr_t + w.t)/2))
                         push_with_reverse_flag!(traj, seg, reverse_flag)
-                    else
+                    else # straight and wait
                         # straight to center of cell
-                        seg = StraightTrajectory(pos,h_next,path.cellwidth/2,TimeInterval(t,ctr_t_0))
+                        seg = StraightTrajectory(pos,h,path.cellwidth/2,TimeInterval(t,ctr_t_0))
                         push_with_reverse_flag!(traj, seg, reverse_flag)
                         # wait
                         # seg = StraightTrajectory(ctr_pos_0,h_next,0.0,TimeInterval(ctr_t_0,ctr_t))
                         seg = WaitTrajectory(get_end_pt(traj),get_heading(traj,get_end_time(traj)),TimeInterval(ctr_t_0,ctr_t))
                         push_with_reverse_flag!(traj, seg, reverse_flag)
                         # straight on
+                        if dot(h,h_next) < 0
+                            reverse_flag = !reverse_flag
+                        end
                         seg = StraightTrajectory(ctr_pos,h_next,path.cellwidth/2,TimeInterval(ctr_t,(ctr_t+w.t)/2))
                         push_with_reverse_flag!(traj, seg, reverse_flag)
                     end

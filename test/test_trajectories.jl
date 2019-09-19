@@ -554,3 +554,16 @@ let
     get_heading(traj,t)
     get_yaw_rate(traj,t)
 end
+# reverse with a WAIT in the middle
+let
+    start_pt = VecE2(0.0,0.0)
+    start_time = 0.0
+    action_sequence = [EAST,WAIT,WEST]
+    cell_width = 1.0
+    transition_time = 2.0
+    grid_path = construct_grid_world_path(start_pt,start_time,
+        action_sequence,cell_width,transition_time)
+
+    base_traj = construct_trajectory(grid_path)
+    verify(base_traj)
+end
